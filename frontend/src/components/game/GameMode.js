@@ -32,6 +32,8 @@ function GamePicker({ teamId }) {
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
   const [opponent, setOpponent] = useState('');
+  const [format,   setFormat]   = useState('standard');
+  const [gameDate, setGameDate] = useState(new Date().toISOString().split('T')[0]);
 
   const upcoming = games.filter(g => g.status !== 'completed');
 
@@ -40,13 +42,23 @@ function GamePicker({ teamId }) {
     if (!opponent.trim()) return;
     setCreating(true);
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const game  = await scheduleGame({ opponent: opponent.trim(), gameDate: today });
+      const game = await scheduleGame({ opponent: opponent.trim(), gameDate, format });
       navigate(`/game/${game.id}`);
     } finally {
       setCreating(false);
     }
   }
+
+  const segBtn = (val, label) => ({
+    flex: 1, padding: 'var(--sp-2) var(--sp-3)',
+    border: '1px solid',
+    borderColor: format === val ? 'var(--color-gold)' : 'var(--color-surface-3)',
+    background:  format === val ? 'var(--color-gold-muted)' : 'transparent',
+    color:       format === val ? 'var(--color-gold)' : 'var(--color-text-muted)',
+    fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)',
+    letterSpacing: '1px', textTransform: 'uppercase', cursor: 'pointer',
+    transition: 'all var(--ease-base)',
+  });
 
   return (
     <div className="page-content">
@@ -59,15 +71,49 @@ function GamePicker({ teamId }) {
 
       <p className="section-heading">New Game</p>
       <div className="card" style={{ marginBottom: 'var(--sp-8)' }}>
-        <form onSubmit={handleCreate} style={{ display: 'flex', gap: 'var(--sp-3)', flexWrap: 'wrap' }}>
-          <input
-            placeholder="Opponent name"
-            value={opponent}
-            onChange={e => setOpponent(e.target.value)}
-            style={{ flex: 1, minWidth: 160 }}
-          />
-          <Button type="submit" variant="primary" disabled={creating || !opponent.trim()} style={{ flexShrink: 0 }}>
-            {creating ? 'Creating…' : 'Start Game'}
+        <form onSubmit={handleCreate}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px', gap: 'var(--sp-3)', marginBottom: 'var(--sp-4)' }}>
+            <div>
+              <label style={{ display: 'block', fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: '10px', letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 'var(--sp-1)' }}>
+                Opponent
+              </label>
+              <input
+                placeholder="Opponent name"
+                value={opponent}
+                onChange={e => setOpponent(e.target.value)}
+                style={{ width: '100%', boxSizing: 'border-box' }}
+                required
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: '10px', letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 'var(--sp-1)' }}>
+                Date
+              </label>
+              <input
+                type="date"
+                value={gameDate}
+                onChange={e => setGameDate(e.target.value)}
+                style={{ width: '100%', boxSizing: 'border-box' }}
+              />
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 'var(--sp-5)' }}>
+            <label style={{ display: 'block', fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: '10px', letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 'var(--sp-2)' }}>
+              Format
+            </label>
+            <div style={{ display: 'flex', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+              <button type="button" onClick={() => setFormat('standard')} style={{ ...segBtn('standard'), borderRadius: 'var(--radius-sm) 0 0 var(--radius-sm)' }}>
+                Standard (10v10)
+              </button>
+              <button type="button" onClick={() => setFormat('6s')} style={{ ...segBtn('6s'), borderLeft: 'none', borderRadius: '0 var(--radius-sm) var(--radius-sm) 0' }}>
+                Lacrosse 6s
+              </button>
+            </div>
+          </div>
+
+          <Button type="submit" variant="primary" disabled={creating || !opponent.trim()} style={{ width: '100%' }}>
+            {creating ? 'Creating…' : 'Create Game'}
           </Button>
         </form>
       </div>

@@ -1,10 +1,105 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useDashboard } from '../../hooks/useDashboard';
+import { useGames } from '../../hooks/useGame';
 import StatCard from '../common/StatCard';
 import Badge from '../common/Badge';
 import Button from '../common/Button';
+
+/* ─── Schedule game modal ───────────────────────────────────────────────────── */
+
+function ScheduleModal({ teamId, onClose, onSaved }) {
+  const { scheduleGame } = useGames(teamId);
+  const [opponent, setOpponent] = useState('');
+  const [gameDate, setGameDate] = useState(new Date().toISOString().split('T')[0]);
+  const [format,   setFormat]   = useState('standard');
+  const [saving,   setSaving]   = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!opponent.trim()) return;
+    setSaving(true);
+    try {
+      await scheduleGame({ opponent: opponent.trim(), gameDate, format });
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const inputStyle = {
+    width: '100%', boxSizing: 'border-box',
+    background: 'var(--color-surface-2)', border: '1px solid var(--color-surface-3)',
+    borderRadius: 'var(--radius-sm)', color: 'var(--color-text-primary)',
+    fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-sm)',
+    padding: '10px var(--sp-4)', outline: 'none',
+  };
+
+  const labelStyle = {
+    display: 'block', fontFamily: 'var(--font-body)', fontWeight: 700,
+    fontSize: '10px', letterSpacing: '1.5px', textTransform: 'uppercase',
+    color: 'var(--color-text-muted)', marginBottom: 'var(--sp-1)',
+  };
+
+  const segBtn = (val) => ({
+    flex: 1, padding: '10px var(--sp-3)',
+    border: '1px solid',
+    borderColor: format === val ? 'var(--color-gold)' : 'var(--color-surface-3)',
+    background:  format === val ? 'var(--color-gold-muted)' : 'transparent',
+    color:       format === val ? 'var(--color-gold)' : 'var(--color-text-muted)',
+    fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)',
+    letterSpacing: '1px', textTransform: 'uppercase', cursor: 'pointer',
+    transition: 'all var(--ease-base)',
+  });
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200, backdropFilter: 'blur(2px)' }} />
+      <div style={{
+        position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+        width: 'min(440px, 92vw)',
+        background: 'var(--color-surface-0)', border: '1px solid var(--color-surface-3)',
+        borderRadius: 'var(--radius-lg)', padding: 'var(--sp-8)',
+        zIndex: 201, boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--sp-6)' }}>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-xl)', color: 'var(--color-text-primary)', margin: 0 }}>
+            Schedule Game
+          </h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', fontSize: '1.2rem', cursor: 'pointer', padding: 4 }}>✕</button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-4)', marginBottom: 'var(--sp-4)' }}>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={labelStyle}>Opponent</label>
+              <input style={inputStyle} value={opponent} onChange={e => setOpponent(e.target.value)} placeholder="Opponent name" required />
+            </div>
+            <div>
+              <label style={labelStyle}>Date</label>
+              <input style={inputStyle} type="date" value={gameDate} onChange={e => setGameDate(e.target.value)} />
+            </div>
+            <div>
+              <label style={labelStyle}>Format</label>
+              <div style={{ display: 'flex', borderRadius: 'var(--radius-sm)', overflow: 'hidden', height: 41 }}>
+                <button type="button" onClick={() => setFormat('standard')} style={{ ...segBtn('standard'), borderRadius: 'var(--radius-sm) 0 0 var(--radius-sm)' }}>10v10</button>
+                <button type="button" onClick={() => setFormat('6s')}      style={{ ...segBtn('6s'), borderLeft: 'none', borderRadius: '0 var(--radius-sm) var(--radius-sm) 0' }}>6s</button>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 'var(--sp-3)', justifyContent: 'flex-end', marginTop: 'var(--sp-2)' }}>
+            <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>
+            <Button type="submit" variant="primary" disabled={saving || !opponent.trim()}>
+              {saving ? 'Saving…' : 'Schedule'}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </>
+  );
+}
 
 function formatDate(dateStr) {
   if (!dateStr) return '';
@@ -14,6 +109,7 @@ function formatDate(dateStr) {
 export default function SeasonDashboard() {
   const { team, coach } = useAuth();
   const { data, loading, error, refresh } = useDashboard(team?.id);
+  const [showSchedule, setShowSchedule] = useState(false);
 
   // ─── Loading ──────────────────────────────────────────────
   if (loading) {
@@ -90,7 +186,10 @@ export default function SeasonDashboard() {
           <h1 className="page-title">{team.teamName} <span>Overview</span></h1>
           <p className="page-subtitle">{team.season} Season</p>
         </div>
-        <Button variant="outline" size="sm" onClick={refresh}>Refresh</Button>
+        <div style={{ display: 'flex', gap: 'var(--sp-3)' }}>
+          <Button variant="ghost" size="sm" onClick={refresh}>Refresh</Button>
+          <Button variant="outline" size="sm" onClick={() => setShowSchedule(true)}>+ Schedule Game</Button>
+        </div>
       </div>
 
       {/* Record */}
@@ -255,6 +354,14 @@ export default function SeasonDashboard() {
             })}
           </div>
         </>
+      )}
+
+      {showSchedule && (
+        <ScheduleModal
+          teamId={team.id}
+          onClose={() => setShowSchedule(false)}
+          onSaved={() => { setShowSchedule(false); refresh(); }}
+        />
       )}
 
     </div>
