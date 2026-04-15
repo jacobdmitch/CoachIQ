@@ -1,0 +1,174 @@
+/* ═══════════════════════════════════════════════════════════
+   LoginPage — full-screen brand-styled auth screen
+   ═══════════════════════════════════════════════════════════ */
+
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  width: 100%;
+  background-color: var(--color-black);
+  padding: var(--sp-6);
+  /* Subtle radial glow from centre */
+  background-image: radial-gradient(
+    ellipse 60% 50% at 50% 40%,
+    rgba(201, 162, 39, 0.06) 0%,
+    transparent 70%
+  );
+}
+
+/* ─── Card ───────────────────────────────────────────────── */
+
+.login-card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--color-surface-0);
+  border: 1px solid var(--color-surface-3);
+  border-radius: var(--radius-xl);
+  padding: var(--sp-10) var(--sp-10);
+  box-shadow: var(--shadow-lg);
+}
+
+/* ─── Logo lockup ────────────────────────────────────────── */
+
+.login-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-8);
+}
+
+.login-logo-mark {
+  width: 52px;
+  height: auto;
+}
+
+.login-wordmark {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: var(--text-2xl);
+  letter-spacing: 3px;
+  color: var(--color-text-primary);
+  line-height: 1;
+}
+
+.login-wordmark span {
+  color: var(--color-gold);
+}
+
+.login-tagline {
+  font-family: var(--font-body);
+  font-weight: 300;
+  font-size: var(--text-xs);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+  margin-top: var(--sp-1);
+}
+
+/* ─── Form ────────────────────────────────────────────────── */
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.login-label {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: var(--text-xs);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.login-input {
+  width: 100%;
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-surface-3);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  font-weight: 300;
+  font-size: max(16px, var(--text-base));
+  min-height: 48px;
+  padding: var(--sp-3) var(--sp-4);
+  outline: none;
+  transition: border-color var(--ease-base), box-shadow var(--ease-base);
+}
+
+.login-input:focus {
+  border-color: var(--color-gold-border);
+  box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.10);
+}
+
+.login-input::placeholder {
+  color: var(--color-text-subtle);
+}
+
+/* ─── Error banner ───────────────────────────────────────── */
+
+.login-error {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  background: var(--color-red-bg);
+  border: 1px solid var(--color-red-border);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3) var(--sp-4);
+  font-family: var(--font-body);
+  font-weight: 300;
+  font-size: var(--text-sm);
+  color: var(--color-red);
+}
+
+/* ─── Submit button ───────────────────────────────────────── */
+
+.login-submit {
+  width: 100%;
+  min-height: 48px;
+  background: var(--color-gold);
+  border: 1.5px solid var(--color-gold);
+  border-radius: var(--radius-sm);
+  color: #0A1018;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: var(--text-sm);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all var(--ease-base);
+  margin-top: var(--sp-2);
+}
+
+.login-submit:hover:not(:disabled) {
+  background: var(--color-gold-light);
+  border-color: var(--color-gold-light);
+  box-shadow: var(--shadow-gold);
+}
+
+.login-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ─── Footer ─────────────────────────────────────────────── */
+
+.login-footer {
+  margin-top: var(--sp-6);
+  text-align: center;
+  font-family: var(--font-body);
+  font-weight: 300;
+  font-size: var(--text-xs);
+  color: var(--color-text-subtle);
+  letter-spacing: 0.5px;
+}

@@ -1,5 +1,199 @@
-.tablet-nav{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:space-around;align-items:center;background-color:#ffffff;border-top:1px solid #e0e0e0;padding:8px 0;height:64px;z-index:100;}
-.nav-tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-decoration:none;color:#666;padding:8px;transition:color 0.2s ease;}
-.nav-tab:hover{color:#2196f3;}
-.nav-icon{font-size:24px;}
-.nav-label{font-size:12px;text-align:center;}
+/* ═══════════════════════════════════════════════════════════
+   TabletNav — Apple HIG top navigation bar
+   Fixed, full-width, safe-area aware. No bottom tab bar.
+   ═══════════════════════════════════════════════════════════ */
+
+.tablet-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--nav-z);
+
+  /* Total height = design height + safe-area inset (Dynamic Island / notch) */
+  height: calc(var(--nav-height) + var(--safe-top));
+  padding-top: var(--safe-top);
+
+  display: flex;
+  align-items: center;
+  gap: var(--sp-6);
+
+  padding-left:  calc(var(--sp-6) + var(--safe-left));
+  padding-right: calc(var(--sp-6) + var(--safe-right));
+
+  background: var(--color-surface-0);
+  border-bottom: 1px solid var(--color-surface-3);
+
+  /* Subtle frosted-glass blur — degrades gracefully on older browsers */
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* ─── Brand lockup (logo mark + wordmark) ─────────────────── */
+
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  text-decoration: none;
+  flex-shrink: 0;
+  /* HIG: 44pt minimum touch target */
+  min-height: var(--nav-tab-min-h);
+}
+
+.nav-logo-mark {
+  width: 26px;
+  height: auto;
+  flex-shrink: 0;
+}
+
+/* Team logo image — shown when a custom logo has been uploaded */
+.nav-team-logo {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  object-fit: contain;
+  flex-shrink: 0;
+  background: transparent;
+}
+
+.nav-wordmark {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 19px;
+  letter-spacing: 2px;
+  line-height: 1;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+.nav-wordmark span {
+  color: var(--color-gold);
+}
+
+/* ─── Tab list ────────────────────────────────────────────── */
+
+.nav-tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex: 1;
+}
+
+.nav-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  min-height: var(--nav-tab-min-h); /* HIG: 44pt */
+
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: var(--text-xs);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--color-text-muted);
+
+  border-radius: var(--radius-sm);
+  position: relative;
+  transition: color var(--ease-base), background var(--ease-base);
+
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+.nav-tab:hover {
+  color: var(--color-text-primary);
+  background: var(--color-surface-1);
+}
+
+.nav-tab.active {
+  color: var(--color-gold);
+  background: var(--color-gold-muted);
+}
+
+/* Gold underline — flush with the nav's bottom border */
+.nav-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: var(--sp-4);
+  right: var(--sp-4);
+  height: 2px;
+  background: var(--color-gold);
+  border-radius: var(--radius-full);
+}
+
+/* ─── Tab icon (inline SVG) ───────────────────────────────── */
+
+.nav-tab-icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  opacity: 0.6;
+  transition: opacity var(--ease-base);
+}
+
+.nav-tab:hover .nav-tab-icon,
+.nav-tab.active .nav-tab-icon {
+  opacity: 1;
+}
+
+/* ─── Right-side actions ──────────────────────────────────── */
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-shrink: 0;
+}
+
+/* Coach avatar / initials button */
+.nav-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Visual: 36px circle */
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  background: var(--color-gold-muted);
+  border: 1.5px solid var(--color-gold-border);
+
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: var(--text-xs);
+  letter-spacing: 1px;
+  color: var(--color-gold);
+  text-transform: uppercase;
+
+  cursor: pointer;
+  transition: background var(--ease-base), border-color var(--ease-base);
+
+  /* HIG: expand touch target with negative margin */
+  margin: -4px;
+  padding: 4px;
+  box-sizing: content-box;
+}
+
+.nav-avatar:hover {
+  background: rgba(201, 162, 39, 0.25);
+  border-color: var(--color-gold);
+}
+
+/* ─── Responsive ──────────────────────────────────────────── */
+
+/* iPad portrait: hide wordmark text, keep logo mark */
+@media (max-width: 768px) {
+  .nav-wordmark { display: none; }
+  .tablet-nav   { gap: var(--sp-4); }
+  .tablet-nav   { padding-left: calc(var(--sp-4) + var(--safe-left)); padding-right: calc(var(--sp-4) + var(--safe-right)); }
+}
+
+/* iPhone: hide tab labels, show icons only */
+@media (max-width: 600px) {
+  .nav-tab-label { display: none; }
+  .nav-tab        { padding: var(--sp-2) var(--sp-3); }
+  .nav-tab-icon   { width: 18px; height: 18px; }
+}

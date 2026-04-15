@@ -1,5 +1,254 @@
-*{margin:0;padding:0;box-sizing:border-box;}
-html,body{height:100%;width:100%;}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Roboto',sans-serif;background-color:#f5f5f5;color:#333;}
-#root{height:100%;width:100%;}
-button{font-family:inherit;cursor:pointer;border:none;border-radius:4px;padding:10px 16px;font-size:14px;}
+/* ═══════════════════════════════════════════════════════════
+   CoachIQ Global Styles
+   Import order: tokens → global → component CSS
+   ═══════════════════════════════════════════════════════════ */
+
+@import './tokens.css';
+
+/* ─── Custom Font Faces ─────────────────────────────────────
+   Font files are bundled in src/assets/fonts/.
+   local() is tried first (faster on dev machines where fonts
+   are installed); url() is the production fallback.
+   ─────────────────────────────────────────────────────────── */
+
+@font-face {
+  font-family: 'BaronNeue';
+  src: local('Baronneue-Black'),
+       local('BaronNeue-Black'),
+       url('../assets/fonts/BaronNeue-Black.otf') format('opentype');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'BaronNeue';
+  src: local('Baronneue-Bold'),
+       local('BaronNeue-Bold'),
+       url('../assets/fonts/BaronNeue-Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'BaronNeue';
+  src: local('Baronneue-Regular'),
+       local('BaronNeue-Regular'),
+       url('../assets/fonts/BaronNeue-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Houston';
+  src: local('Houston Regular'),
+       local('Houston-Regular'),
+       url('../assets/fonts/Houston Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Nexa';
+  src: local('Nexa Bold'),
+       local('Nexa-Bold'),
+       url('../assets/fonts/Nexa Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Nexa';
+  src: local('Nexa Light'),
+       local('Nexa-Light'),
+       url('../assets/fonts/Nexa Light.otf') format('opentype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ─── Reset ─────────────────────────────────────────────────── */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  /* Inherit font smoothing so every element benefits */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Root ──────────────────────────────────────────────────── */
+
+html {
+  height: 100%;
+  /* Prevent iOS font scaling on orientation change */
+  -webkit-text-size-adjust: 100%;
+  /* Smooth scroll for all anchors */
+  scroll-behavior: smooth;
+}
+
+body {
+  height: 100%;
+  width: 100%;
+  background-color: var(--color-black);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  font-weight: 300;
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  /* Prevent iOS rubber-band on the body (content areas handle scroll) */
+  overscroll-behavior: none;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+/* ─── Typography Baseline ──────────────────────────────────── */
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 900;
+  letter-spacing: 1px;
+  line-height: var(--leading-tight);
+  color: var(--color-text-primary);
+}
+
+p {
+  color: var(--color-text-secondary);
+  font-weight: 300;
+}
+
+a {
+  color: var(--color-gold);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--color-gold-light);
+}
+
+/* Overline / label utility — used throughout the app */
+.label {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: var(--text-xs);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* Stat numbers (Houston font) */
+.stat-num {
+  font-family: var(--font-stats);
+  line-height: 1;
+}
+
+/* ─── Button Reset ──────────────────────────────────────────── */
+
+button {
+  font-family: var(--font-body);
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  background: none;
+  /* HIG: minimum 44pt touch target */
+  min-height: 44px;
+  padding: var(--sp-3) var(--sp-6);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  transition: all var(--ease-base);
+  /* Prevent iOS callout/select on long press */
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+/* ─── Input Reset ───────────────────────────────────────────── */
+
+input, select, textarea {
+  font-family: var(--font-body);
+  font-weight: 300;
+  font-size: var(--text-base);
+  background: var(--input-bg);
+  border: var(--input-border);
+  border-radius: var(--input-radius);
+  color: var(--color-text-primary);
+  min-height: var(--input-height);
+  padding: var(--sp-3) var(--sp-4);
+  outline: none;
+  transition: border-color var(--ease-base);
+  /* Prevent iOS zoom on focus when font-size < 16px */
+  font-size: max(16px, var(--text-base));
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--color-gold-border);
+}
+input::placeholder {
+  color: var(--color-text-subtle);
+}
+
+/* ─── Scrollbar ─────────────────────────────────────────────── */
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: var(--color-surface-3); border-radius: var(--radius-full); }
+::-webkit-scrollbar-thumb:hover { background: var(--color-surface-4); }
+
+/* ─── Utility Classes ──────────────────────────────────────── */
+
+/* Divider */
+.divider {
+  height: 1px;
+  background: var(--color-surface-3);
+  border: none;
+  margin: var(--sp-4) 0;
+}
+
+/* Gold accent rule (top of stat cards) */
+.accent-top {
+  position: relative;
+}
+.accent-top::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--color-gold);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+/* Card — base */
+.card {
+  background: var(--card-bg);
+  border: var(--card-border);
+  border-radius: var(--card-radius);
+  padding: var(--card-padding);
+}
+
+/* Truncate single line */
+.truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Screen-reader only */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  border: 0;
+}
+
+/* Focus ring — keyboard navigation (HIG: visible focus indicators) */
+:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 2px;
+}
+
+/* Tap highlight — suppress iOS blue flash */
+* { -webkit-tap-highlight-color: transparent; }

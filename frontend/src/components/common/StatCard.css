@@ -1,0 +1,82 @@
+/* ═══════════════════════════════════════════════════════════
+   StatCard — metric display card with gold accent top line
+   ═══════════════════════════════════════════════════════════ */
+
+.stat-card {
+  background: var(--card-bg);
+  border: var(--card-border);
+  border-radius: var(--card-radius);
+  padding: var(--card-padding);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Gold accent top rule */
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--color-gold);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+/* ─── Label ──────────────────────────────────────────────── */
+
+.stat-card-label {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: var(--text-xs);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin-bottom: var(--sp-3);
+}
+
+/* ─── Value (Houston font for numerics) ──────────────────── */
+
+.stat-card-value {
+  font-family: var(--font-stats);
+  font-size: var(--text-3xl);
+  line-height: 1;
+  color: var(--color-text-primary);
+  margin-bottom: var(--sp-2);
+}
+
+.stat-card-unit {
+  font-family: var(--font-body);
+  font-weight: 300;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-left: var(--sp-1);
+}
+
+/* ─── Delta (change indicator) ───────────────────────────── */
+
+.stat-card-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: var(--text-xs);
+  letter-spacing: 0.5px;
+}
+
+.stat-card-delta.up   { color: var(--color-green); }
+.stat-card-delta.down { color: var(--color-red);   }
+.stat-card-delta.flat { color: var(--color-text-muted); }
+
+.stat-card-delta-arrow {
+  font-size: 10px;
+}
+
+/* ─── Sub-label / context text ───────────────────────────── */
+
+.stat-card-sub {
+  font-family: var(--font-body);
+  font-weight: 300;
+  font-size: var(--text-xs);
+  color: var(--color-text-subtle);
+  margin-top: var(--sp-1);
+}

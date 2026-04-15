@@ -1,0 +1,74 @@
+/* ═══════════════════════════════════════════════════════════
+   Badge — status / category pill
+   Variants: gold | green | red | amber | blue | gray
+   ═══════════════════════════════════════════════════════════ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 3px var(--sp-3);
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: var(--text-xs);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  line-height: 1.6;
+}
+
+/* ─── Dot indicator ──────────────────────────────────────── */
+
+.badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+/* ─── Variants ───────────────────────────────────────────── */
+
+.badge-gold {
+  background: var(--color-gold-muted);
+  border-color: var(--color-gold-border);
+  color: var(--color-gold);
+}
+.badge-gold .badge-dot { background: var(--color-gold); }
+
+.badge-green {
+  background: var(--color-green-bg);
+  border-color: var(--color-green-border);
+  color: var(--color-green);
+}
+.badge-green .badge-dot { background: var(--color-green); }
+
+.badge-red {
+  background: var(--color-red-bg);
+  border-color: var(--color-red-border);
+  color: var(--color-red);
+}
+.badge-red .badge-dot { background: var(--color-red); }
+
+.badge-amber {
+  background: var(--color-amber-bg);
+  border-color: var(--color-amber-border);
+  color: var(--color-amber);
+}
+.badge-amber .badge-dot { background: var(--color-amber); }
+
+.badge-blue {
+  background: var(--color-blue-bg);
+  border-color: var(--color-blue-border);
+  color: var(--color-blue);
+}
+.badge-blue .badge-dot { background: var(--color-blue); }
+
+.badge-gray {
+  background: var(--color-surface-1);
+  border-color: var(--color-surface-3);
+  color: var(--color-text-muted);
+}
+.badge-gray .badge-dot { background: var(--color-text-muted); }

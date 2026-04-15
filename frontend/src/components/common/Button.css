@@ -1,0 +1,141 @@
+/* ═══════════════════════════════════════════════════════════
+   Button — CoachIQ branded button component
+   Variants: primary | secondary | outline | ghost | danger
+   Sizes:    sm | base | lg
+   ═══════════════════════════════════════════════════════════ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+
+  font-family: var(--font-body);
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-decoration: none;
+
+  border: 1.5px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--ease-base);
+  -webkit-touch-callout: none;
+  user-select: none;
+
+  /* HIG: minimum 44pt touch target */
+  min-height: 44px;
+}
+
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ─── Sizes ─────────────────────────────────────────────── */
+
+.btn-sm {
+  min-height: 36px;
+  padding: var(--sp-2) var(--sp-4);
+  font-size: var(--text-xs);
+}
+
+.btn-base {
+  min-height: 44px;
+  padding: var(--sp-3) var(--sp-6);
+  font-size: var(--text-sm);
+}
+
+.btn-lg {
+  min-height: 52px;
+  padding: var(--sp-4) var(--sp-8);
+  font-size: var(--text-base);
+}
+
+/* ─── Primary (gold fill) ────────────────────────────────── */
+
+.btn-primary {
+  background: var(--color-gold);
+  border-color: var(--color-gold);
+  color: #0A1018;
+}
+
+.btn-primary:hover {
+  background: var(--color-gold-light);
+  border-color: var(--color-gold-light);
+  box-shadow: var(--shadow-gold);
+}
+
+.btn-primary:active {
+  background: var(--color-gold-dim);
+  border-color: var(--color-gold-dim);
+}
+
+/* ─── Secondary (surface fill) ──────────────────────────── */
+
+.btn-secondary {
+  background: var(--color-surface-1);
+  border-color: var(--color-surface-3);
+  color: var(--color-text-primary);
+}
+
+.btn-secondary:hover {
+  background: var(--color-surface-2);
+  border-color: var(--color-surface-3);
+}
+
+/* ─── Outline (gold border, transparent fill) ────────────── */
+
+.btn-outline {
+  background: transparent;
+  border-color: var(--color-gold-border);
+  color: var(--color-gold);
+}
+
+.btn-outline:hover {
+  background: var(--color-gold-muted);
+  border-color: var(--color-gold);
+}
+
+/* ─── Ghost (no border, minimal) ────────────────────────── */
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--color-text-muted);
+}
+
+.btn-ghost:hover {
+  background: var(--color-surface-1);
+  color: var(--color-text-primary);
+}
+
+/* ─── Danger (red) ───────────────────────────────────────── */
+
+.btn-danger {
+  background: transparent;
+  border-color: var(--color-red-border);
+  color: var(--color-red);
+}
+
+.btn-danger:hover {
+  background: var(--color-red-bg);
+  border-color: var(--color-red);
+}
+
+/* ─── Icon-only modifier ─────────────────────────────────── */
+
+.btn-icon-only {
+  padding: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+}
+
+.btn-icon-only.btn-sm {
+  width: 36px;
+  height: 36px;
+}

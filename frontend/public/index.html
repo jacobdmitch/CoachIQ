@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+
+    <!-- Prevent iOS auto-zoom on input focus -->
+    <meta name="format-detection" content="telephone=no" />
+
+    <!-- Apple HIG: full-screen web app mode -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="CoachIQ" />
+
+    <!-- Theme color matches brand black -->
+    <meta name="theme-color" content="#0A1018" />
+
+    <!-- Prevent FOUC — match app background before JS loads -->
+    <style>
+      html, body, #root {
+        background-color: #0A1018;
+        margin: 0;
+        padding: 0;
+        height: 100%;
+      }
+    </style>
+
+    <title>CoachIQ</title>
+  </head>
+  <body>
+    <noscript>CoachIQ requires JavaScript to run.</noscript>
+    <div id="root"></div>
+  </body>
+</html>

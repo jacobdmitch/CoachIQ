@@ -71,6 +71,10 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
+// Static file serving — uploaded assets (logos, etc.)
+const uploadsPath = path.join(__dirname, 'uploads');
+app.use('/uploads', express.static(uploadsPath));
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
