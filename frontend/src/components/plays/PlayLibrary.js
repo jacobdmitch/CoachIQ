@@ -111,78 +111,86 @@ export default function PlayLibrary() {
   };
 
   // Show editor if creating/editing
+  // PlayEditor manages its own full-height layout — render outside page-content
   if (isCreating || editingPlay) {
     return (
-      <PlayEditor
-        play={editingPlay || null}
-        teamId={teamId}
-        onSave={handleSavePlay}
-        onCancel={() => {
-          setEditingPlay(null);
-          setIsCreating(false);
-        }}
-      />
+      <div className="play-editor-page">
+        <PlayEditor
+          play={editingPlay || null}
+          teamId={teamId}
+          onSave={handleSavePlay}
+          onCancel={() => {
+            setEditingPlay(null);
+            setIsCreating(false);
+          }}
+        />
+      </div>
     );
   }
 
   // Library view
   return (
-    <div className={styles.container}>
-      {/* Header */}
-      <div className={styles.header}>
-        <h1 className={styles.title}>Play Library</h1>
-        <button onClick={() => setIsCreating(true)} className={styles.newPlayBtn}>
-          + New Play
-        </button>
-      </div>
-
-      {/* Filter bar */}
-      <div className={styles.filterBar}>
-        {['', 'emo', 'man_down', 'settled', 'transition', 'faceoff', 'clear', '6s_set', '6s_fast_break'].map((tag) => (
-          <button
-            key={tag}
-            onClick={() => setFilter(tag)}
-            className={filter === tag ? styles.filterBtnActive : styles.filterBtnInactive}
-            style={filter === tag ? { backgroundColor: SITUATION_COLORS[tag] || '#333' } : undefined}
-          >
-            {tag ? SITUATION_LABELS[tag] : 'All'}
-          </button>
-        ))}
-      </div>
-
-      {/* Empty state */}
-      {plays.length === 0 && !loading && (
-        <div className={styles.emptyState}>
-          <p className={styles.emptyText}>
-            No plays yet. Create your first play to get started!
-          </p>
+    <div className="page-content">
+      <div className={styles.container}>
+        {/* Header */}
+        <div className={styles.header}>
+          <div>
+            <h1 className={styles.title}>Play <span style={{ color: 'var(--color-gold)' }}>Library</span></h1>
+            <p className={styles.subtitle}>{plays.length > 0 ? `${plays.length} plays` : 'Build your playbook'}</p>
+          </div>
           <button onClick={() => setIsCreating(true)} className={styles.newPlayBtn}>
-            Create First Play
+            + New Play
           </button>
         </div>
-      )}
 
-      {/* Loading state */}
-      {loading && (
-        <div className={styles.loadingState}>
-          <p>Loading plays...</p>
-        </div>
-      )}
-
-      {/* Play cards grid */}
-      {plays.length > 0 && (
-        <div className={styles.playGrid}>
-          {plays.map((play) => (
-            <PlayCard
-              key={play.id}
-              play={play}
-              onEdit={() => setEditingPlay(play)}
-              onDuplicate={handleDuplicatePlay}
-              onDelete={handleDeletePlay}
-            />
+        {/* Filter bar */}
+        <div className={styles.filterBar}>
+          {['', 'emo', 'man_down', 'settled', 'transition', 'faceoff', 'clear', '6s_set', '6s_fast_break'].map((tag) => (
+            <button
+              key={tag}
+              onClick={() => setFilter(tag)}
+              className={filter === tag ? styles.filterBtnActive : styles.filterBtnInactive}
+              style={filter === tag ? { backgroundColor: SITUATION_COLORS[tag] || 'var(--color-surface-4)' } : undefined}
+            >
+              {tag ? SITUATION_LABELS[tag] : 'All'}
+            </button>
           ))}
         </div>
-      )}
+
+        {/* Loading state */}
+        {loading && (
+          <div className={styles.loadingState}>
+            Loading plays…
+          </div>
+        )}
+
+        {/* Empty state */}
+        {plays.length === 0 && !loading && (
+          <div className={styles.emptyState}>
+            <p className={styles.emptyText}>
+              No plays yet. Build your first play to get started.
+            </p>
+            <button onClick={() => setIsCreating(true)} className={styles.newPlayBtn}>
+              Create First Play
+            </button>
+          </div>
+        )}
+
+        {/* Play cards grid */}
+        {plays.length > 0 && (
+          <div className={styles.playGrid}>
+            {plays.map((play) => (
+              <PlayCard
+                key={play.id}
+                play={play}
+                onEdit={() => setEditingPlay(play)}
+                onDuplicate={handleDuplicatePlay}
+                onDelete={handleDeletePlay}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -95,6 +95,13 @@
   }
   .grid-4 { grid-template-columns: repeat(2, 1fr); }
   .grid-3 { grid-template-columns: repeat(2, 1fr); }
+
+  .page-header {
+    flex-wrap: wrap;
+    margin-bottom: var(--sp-6);
+  }
+
+  .page-title { font-size: var(--text-xl); }
 }
 
 @media (max-width: 600px) {
@@ -102,5 +109,34 @@
   .app-content {
     padding-left:  calc(var(--sp-3) + var(--safe-left));
     padding-right: calc(var(--sp-3) + var(--safe-right));
+    padding-bottom: calc(var(--sp-10) + var(--safe-bottom));
+  }
+  .page-content {
+    padding: var(--sp-5) 0;
+  }
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-5);
+  }
+  .page-title { font-size: var(--text-xl); }
+}
+
+/* ─── Play editor: breaks out of the page-content max-width ── */
+/* PlayEditor renders directly in app-content; it manages its own layout */
+.play-editor-page {
+  /* Override page-content padding for full-bleed editor */
+  margin: calc(-1 * var(--sp-8)) calc(-1 * var(--sp-6));
+}
+
+@media (max-width: 900px) {
+  .play-editor-page {
+    margin: calc(-1 * var(--sp-8)) calc(-1 * var(--sp-4));
+  }
+}
+@media (max-width: 600px) {
+  .play-editor-page {
+    margin: calc(-1 * var(--sp-5)) calc(-1 * var(--sp-3));
   }
 }

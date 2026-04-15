@@ -37,6 +37,9 @@ export class GameStateManager {
     // Events log
     this.events = [];
     this.lastEventTimestamp = 0;
+
+    // Sub staging queue — transient, cleared after activation
+    this.subQueue = [];
   }
 
   /**
@@ -72,6 +75,7 @@ export class GameStateManager {
       awayScore: this.awayScore,
       fieldPositions: this.fieldPositions,
       bench: this.bench,
+      subQueue: this.subQueue,
       events: this.events,
       timestamp: Date.now(),
     };
@@ -402,6 +406,238 @@ export class GameStateManager {
    */
   getStateSince(timestamp) {
     return this.events.filter((e) => e.timestamp >= timestamp);
+  }
+
+  // ─── Sub Queue ────────────────────────────────────────────────────────────────
+
+  /**
+   * Add an entry to the sub queue with auto-merge conflict resolution.
+   * If the new entry shares a player with an existing entry, the conflicting
+   * move is removed from the existing entry (later action wins) and an alert
+   * is returned so the UI can notify the coach.
+   *
+   * @param {Object} entry - Queue entry from resolveSituation / resolveLineSwap / individual
+   * @returns {{ entry: Object, mergeAlerts: Array }}
+   */
+  addToQueue(entry) {
+    const mergeAlerts = [];
+    const newPlayerIds = new Set([
+      ...entry.moves.map(m => m.playerIn),
+      ...entry.moves.map(m => m.playerOut),
+    ]);
+
+    for (const existing of this.subQueue) {
+      const toRemove = existing.moves.filter(
+        m => newPlayerIds.has(m.playerIn) || newPlayerIds.has(m.playerOut)
+      );
+      if (toRemove.length === 0) continue;
+
+      // Remove conflicting moves from existing entry
+      existing.moves = existing.moves.filter(
+        m => !newPlayerIds.has(m.playerIn) && !newPlayerIds.has(m.playerOut)
+      );
+
+      for (const move of toRemove) {
+        const conflictId = newPlayerIds.has(move.playerIn) ? move.playerIn : move.playerOut;
+        const athlete    = this.athletes.find(a => a.id === conflictId);
+        const name       = athlete ? `${athlete.first_name} ${athlete.last_name}` : conflictId;
+        mergeAlerts.push({
+          message: `${name} moved from "${existing.label}" to "${entry.label}"`,
+          affectedEntry: existing.label,
+        });
+      }
+    }
+
+    // Drop empty entries left after merge
+    this.subQueue = this.subQueue.filter(e => e.moves.length > 0);
+    this.subQueue.push(entry);
+
+    return { entry, mergeAlerts };
+  }
+
+  /**
+   * Remove an entire queue entry by its queueId.
+   */
+  removeFromQueue(queueId) {
+    this.subQueue = this.subQueue.filter(e => e.queueId !== queueId);
+  }
+
+  /**
+   * Remove a single move from a queue entry.
+   * If the entry has no moves remaining, the entry is also removed.
+   */
+  removeMoveFromQueue(queueId, moveId) {
+    const entry = this.subQueue.find(e => e.queueId === queueId);
+    if (!entry) return;
+    entry.moves = entry.moves.filter(m => m.moveId !== moveId);
+    if (entry.moves.length === 0) this.removeFromQueue(queueId);
+  }
+
+  /**
+   * Clear the entire sub queue.
+   */
+  clearQueue() {
+    this.subQueue = [];
+  }
+
+  /**
+   * Validate the entire queue before activation.
+   * @returns {string[]} Array of error messages (empty = valid)
+   */
+  validateQueue() {
+    const errors      = [];
+    const playerInSet = new Set();
+    const playerOutSet= new Set();
+    const positionSet = new Set();
+
+    for (const entry of this.subQueue) {
+      for (const move of entry.moves) {
+        const inName  = this._athleteName(move.playerIn);
+        const outName = this._athleteName(move.playerOut);
+
+        if (move.playerIn === move.playerOut) {
+          errors.push(`${inName} is queued as both in and out`);
+        }
+        if (playerInSet.has(move.playerIn)) {
+          errors.push(`${inName} is queued to sub in more than once`);
+        }
+        if (playerOutSet.has(move.playerOut)) {
+          errors.push(`${outName} is queued to sub out more than once`);
+        }
+        if (positionSet.has(move.position)) {
+          errors.push(`Position ${move.position} is targeted by more than one sub`);
+        }
+        if (!this.bench.includes(move.playerIn)) {
+          errors.push(`${inName} is not on the bench`);
+        }
+        if (!Object.values(this.fieldPositions).includes(move.playerOut)) {
+          errors.push(`${outName} is not on the field`);
+        }
+
+        playerInSet.add(move.playerIn);
+        playerOutSet.add(move.playerOut);
+        positionSet.add(move.position);
+      }
+    }
+
+    return errors;
+  }
+
+  /**
+   * Execute all staged queue entries atomically.
+   * Clears the queue on success.
+   * @returns {{ success: boolean, event?: Object, executedMoves?: Array, errors?: string[] }}
+   */
+  executeBatchSub() {
+    if (this.subQueue.length === 0) {
+      return { success: false, errors: ['Sub queue is empty'] };
+    }
+
+    const errors = this.validateQueue();
+    if (errors.length > 0) return { success: false, errors };
+
+    const timestamp     = Date.now();
+    const executedMoves = [];
+
+    for (const entry of this.subQueue) {
+      for (const move of entry.moves) {
+        // Find and clear playerOut's current slot
+        for (const [slot, id] of Object.entries(this.fieldPositions)) {
+          if (id === move.playerOut) {
+            this.fieldPositions[slot] = null;
+            break;
+          }
+        }
+        // Place playerIn in target position
+        this.fieldPositions[move.position] = move.playerIn;
+        this.bench = this.bench.filter(id => id !== move.playerIn);
+        this.bench.push(move.playerOut);
+
+        executedMoves.push({ ...move, timestamp });
+      }
+    }
+
+    const event = {
+      type:      'BATCH_SUBSTITUTION',
+      timestamp,
+      moves:     executedMoves,
+      period:    this.period,
+      clockTime: this.clockTime,
+    };
+    this.events.push(event);
+    this.subQueue = [];
+
+    return { success: true, event, executedMoves };
+  }
+
+  // ─── Line swap resolution ─────────────────────────────────────────────────────
+
+  // Slot mapping per format per position group
+  static POSITION_GROUP_SLOTS = {
+    standard: {
+      attack:   ['field_0', 'field_1', 'field_2'],
+      midfield: ['field_3', 'field_4', 'field_5'],
+      defense:  ['field_6', 'field_7', 'field_8'],
+    },
+    '6s': {
+      attack:   ['field_0', 'field_1'],
+      midfield: ['field_2', 'field_3'],
+      defense:  ['field_4'],
+    },
+  };
+
+  /**
+   * Resolve a saved line into a sub-queue entry.
+   * Honors current positions: if a line player is already on the field
+   * (anywhere), they stay. Only line players on the bench generate a move.
+   *
+   * @param {Object} line - Line record from DB { id, name, position_group, player_ids }
+   * @returns {Object} Sub-queue entry
+   */
+  resolveLineSwap(line) {
+    const { name, position_group: positionGroup, player_ids: playerIds } = line;
+    const slots = GameStateManager.POSITION_GROUP_SLOTS[this.format]?.[positionGroup] || [];
+
+    const onFieldIds = new Set(
+      Object.values(this.fieldPositions).filter(Boolean)
+    );
+
+    // Split line players: already on field (staying) vs. on bench (coming in)
+    const staying  = playerIds.filter(id => onFieldIds.has(id));
+    const comingIn = playerIds.filter(id => this.bench.includes(id));
+
+    // Non-line players currently in the position group's slots
+    // These are the pull candidates — we pull as many as needed (comingIn.length)
+    const nonLineSlotsOccupants = slots
+      .map(slot => ({ slot, id: this.fieldPositions[slot] }))
+      .filter(({ id }) => id !== null && !playerIds.includes(id));
+
+    const moves = [];
+    for (let i = 0; i < Math.min(comingIn.length, nonLineSlotsOccupants.length); i++) {
+      moves.push({
+        moveId:    crypto.randomUUID(),
+        playerIn:  comingIn[i],
+        playerOut: nonLineSlotsOccupants[i].id,
+        position:  nonLineSlotsOccupants[i].slot,
+      });
+    }
+
+    return {
+      queueId:        crypto.randomUUID(),
+      type:           'line',
+      label:          name,
+      source:         'line',
+      situationType:  null,
+      stayingPlayers: staying,
+      moves,
+    };
+  }
+
+  // ─── Private helpers ──────────────────────────────────────────────────────────
+
+  _athleteName(athleteId) {
+    const a = this.athletes.find(x => x.id === athleteId);
+    return a ? `${a.first_name} ${a.last_name}` : athleteId;
   }
 }
 

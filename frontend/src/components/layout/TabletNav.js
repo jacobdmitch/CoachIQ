@@ -157,15 +157,16 @@ const NAV_ITEMS = [
 export default function TabletNav() {
   const { coach, team, logout } = useAuth();
   const navigate                = useNavigate();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef                 = useRef(null);
+  const [menuOpen,   setMenuOpen]   = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const menuRef = useRef(null);
 
   // Initials from coach profile
   const initials = coach
     ? `${(coach.firstName || '')[0] || ''}${(coach.lastName || '')[0] || ''}`.toUpperCase() || 'CO'
     : '–';
 
-  // Close dropdown when clicking outside
+  // Close avatar dropdown when clicking outside
   useEffect(() => {
     function handleClick(e) {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
@@ -176,102 +177,190 @@ export default function TabletNav() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [menuOpen]);
 
+  // Lock body scroll when drawer is open
+  useEffect(() => {
+    if (drawerOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [drawerOpen]);
+
   function handleLogout() {
     logout();
+    setDrawerOpen(false);
     navigate('/login', { replace: true });
   }
 
+  function handleDrawerNav() {
+    setDrawerOpen(false);
+  }
+
   return (
-    <nav className="tablet-nav" role="navigation" aria-label="Main navigation">
+    <>
+      <nav className="tablet-nav" role="navigation" aria-label="Main navigation">
 
-      {/* Brand */}
-      <Link to="/dashboard" className="nav-brand" aria-label="CoachIQ — go to dashboard">
-        {team?.logoUrl
-          ? <TeamLogo url={team.logoUrl} name={team.teamName} />
-          : <LogoMark />
-        }
-        <span className="nav-wordmark">
-          COACH<span>IQ</span>
-        </span>
-      </Link>
-
-      {/* Navigation tabs */}
-      <div className="nav-tabs" role="list">
-        {NAV_ITEMS.map(({ to, label, Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) => `nav-tab${isActive ? ' active' : ''}`}
-            role="listitem"
-            aria-label={label}
-          >
-            <Icon />
-            <span className="nav-tab-label">{label}</span>
-          </NavLink>
-        ))}
-      </div>
-
-      {/* Right actions — team name + coach avatar */}
-      <div className="nav-actions">
-        {team && (
-          <span style={{
-            fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-xs)',
-            color: 'var(--color-text-subtle)', letterSpacing: '0.5px',
-            maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
-            {team.teamName}
+        {/* Brand */}
+        <Link to="/dashboard" className="nav-brand" aria-label="CoachIQ — go to dashboard">
+          {team?.logoUrl
+            ? <TeamLogo url={team.logoUrl} name={team.teamName} />
+            : <LogoMark />
+          }
+          <span className="nav-wordmark">
+            COACH<span>IQ</span>
           </span>
-        )}
+        </Link>
 
-        {/* Avatar with dropdown */}
-        <div ref={menuRef} style={{ position: 'relative' }}>
-          <div
-            className="nav-avatar"
-            role="button"
-            aria-label="Coach menu"
-            aria-expanded={menuOpen}
-            tabIndex={0}
-            onClick={() => setMenuOpen(v => !v)}
-            onKeyDown={e => e.key === 'Enter' && setMenuOpen(v => !v)}
-          >
-            {initials}
+        {/* Navigation tabs (hidden on phone) */}
+        <div className="nav-tabs" role="list">
+          {NAV_ITEMS.map(({ to, label, Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) => `nav-tab${isActive ? ' active' : ''}`}
+              role="listitem"
+              aria-label={label}
+            >
+              <Icon />
+              <span className="nav-tab-label">{label}</span>
+            </NavLink>
+          ))}
+        </div>
+
+        {/* Right actions — team name + coach avatar */}
+        <div className="nav-actions">
+          {team && (
+            <span className="nav-team-label" style={{
+              fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-xs)',
+              color: 'var(--color-text-subtle)', letterSpacing: '0.5px',
+              maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {team.teamName}
+            </span>
+          )}
+
+          {/* Avatar with dropdown (tablet+) */}
+          <div ref={menuRef} style={{ position: 'relative' }}>
+            <div
+              className="nav-avatar"
+              role="button"
+              aria-label="Coach menu"
+              aria-expanded={menuOpen}
+              tabIndex={0}
+              onClick={() => setMenuOpen(v => !v)}
+              onKeyDown={e => e.key === 'Enter' && setMenuOpen(v => !v)}
+            >
+              {initials}
+            </div>
+
+            {menuOpen && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + var(--sp-3))', right: 0,
+                background: 'var(--color-surface-1)', border: '1px solid var(--color-surface-3)',
+                borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)',
+                minWidth: 180, zIndex: 200, overflow: 'hidden',
+              }}>
+                <div style={{ padding: 'var(--sp-4) var(--sp-5)', borderBottom: '1px solid var(--color-surface-3)' }}>
+                  <p style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)' }}>
+                    {coach?.firstName} {coach?.lastName}
+                  </p>
+                  <p style={{ fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginTop: 2 }}>
+                    {coach?.email}
+                  </p>
+                </div>
+                <button onClick={handleLogout} style={{
+                  width: '100%', padding: 'var(--sp-4) var(--sp-5)', textAlign: 'left',
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)',
+                  letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--color-red)',
+                  transition: 'background var(--ease-base)',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--color-red-bg)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  Sign Out
+                </button>
+              </div>
+            )}
           </div>
 
-          {menuOpen && (
-            <div style={{
-              position: 'absolute', top: 'calc(100% + var(--sp-3))', right: 0,
-              background: 'var(--color-surface-1)', border: '1px solid var(--color-surface-3)',
-              borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)',
-              minWidth: 180, zIndex: 200, overflow: 'hidden',
-            }}>
-              {/* Coach info */}
-              <div style={{ padding: 'var(--sp-4) var(--sp-5)', borderBottom: '1px solid var(--color-surface-3)' }}>
-                <p style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)' }}>
-                  {coach?.firstName} {coach?.lastName}
-                </p>
-                <p style={{ fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginTop: 2 }}>
-                  {coach?.email}
-                </p>
-              </div>
+          {/* Hamburger (phone only) */}
+          <div
+            role="button"
+            aria-label="Open navigation menu"
+            aria-expanded={drawerOpen}
+            tabIndex={0}
+            onClick={() => setDrawerOpen(true)}
+            onKeyDown={e => e.key === 'Enter' && setDrawerOpen(true)}
+            className="nav-hamburger"
+          >
+            <span className="nav-hamburger-bar" />
+            <span className="nav-hamburger-bar" />
+            <span className="nav-hamburger-bar" />
+          </div>
+        </div>
 
-              {/* Logout */}
-              <button onClick={handleLogout} style={{
-                width: '100%', padding: 'var(--sp-4) var(--sp-5)', textAlign: 'left',
-                background: 'transparent', border: 'none', cursor: 'pointer',
-                fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)',
-                letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--color-red)',
-                transition: 'background var(--ease-base)',
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--color-red-bg)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-              >
-                Sign Out
-              </button>
-            </div>
-          )}
+      </nav>
+
+      {/* Mobile drawer */}
+      <div
+        className={`nav-drawer${drawerOpen ? ' open' : ''}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Navigation menu"
+      >
+        {/* Drawer header */}
+        <div className="nav-drawer-header">
+          <Link to="/dashboard" className="nav-drawer-brand" onClick={handleDrawerNav} aria-label="CoachIQ home">
+            {team?.logoUrl
+              ? <TeamLogo url={team.logoUrl} name={team.teamName} />
+              : <LogoMark />
+            }
+            <span className="nav-drawer-wordmark">COACH<span>IQ</span></span>
+          </Link>
+          <div
+            className="nav-drawer-close"
+            role="button"
+            aria-label="Close menu"
+            tabIndex={0}
+            onClick={() => setDrawerOpen(false)}
+            onKeyDown={e => e.key === 'Enter' && setDrawerOpen(false)}
+          >
+            ✕
+          </div>
+        </div>
+
+        {/* Nav items */}
+        <div className="nav-drawer-items">
+          {NAV_ITEMS.map(({ to, label, Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) => `nav-drawer-item${isActive ? ' active' : ''}`}
+              onClick={handleDrawerNav}
+              aria-label={label}
+            >
+              <span className="nav-drawer-item-icon"><Icon /></span>
+              {label}
+            </NavLink>
+          ))}
+        </div>
+
+        {/* Footer: coach info + logout */}
+        <div className="nav-drawer-footer">
+          <div className="nav-drawer-coach-info">
+            <p className="nav-drawer-coach-name">{coach?.firstName} {coach?.lastName}</p>
+            <p className="nav-drawer-coach-email">{coach?.email}</p>
+            {team && (
+              <p className="nav-drawer-coach-email" style={{ marginTop: 2 }}>{team.teamName}</p>
+            )}
+          </div>
+          <button className="nav-drawer-logout" onClick={handleLogout}>
+            Sign Out
+          </button>
         </div>
       </div>
-
-    </nav>
+    </>
   );
 }

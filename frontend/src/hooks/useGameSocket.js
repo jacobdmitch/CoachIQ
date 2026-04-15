@@ -18,10 +18,12 @@ const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || window.location.origin;
 export function useGameSocket(gameId, token) {
   const socketRef = useRef(null);
 
-  const [connected,  setConnected]  = useState(false);
-  const [liveState,  setLiveState]  = useState(null);  // full game state from server
-  const [clockTime,  setClockTime]  = useState(null);  // seconds elapsed in period
-  const [events,     setEvents]     = useState([]);     // game event log
+  const [connected,    setConnected]    = useState(false);
+  const [liveState,    setLiveState]    = useState(null);  // full game state from server
+  const [clockTime,    setClockTime]    = useState(null);  // seconds elapsed in period
+  const [events,       setEvents]       = useState([]);    // game event log
+  const [mergeAlerts,  setMergeAlerts]  = useState([]);    // sub queue conflict alerts
+  const [activating,   setActivating]   = useState(false); // batch-sub in-flight
 
   useEffect(() => {
     if (!gameId || !token) return;
@@ -71,6 +73,20 @@ export function useGameSocket(gameId, token) {
     // Generic game event (goal, penalty, etc.)
     socket.on('game_event', (event) => {
       setEvents(prev => [{ ...event, ts: Date.now() }, ...prev]);
+    });
+
+    // Sub queue updated (add/remove entry/move from any connected coach)
+    socket.on('queue_update', ({ subQueue, mergeAlerts: alerts }) => {
+      setLiveState(prev => prev ? { ...prev, subQueue: subQueue || [] } : prev);
+      if (alerts?.length > 0) setMergeAlerts(alerts);
+    });
+
+    // Batch sub executed — full state refresh + clear alerts
+    socket.on('batch_substitution', ({ state }) => {
+      if (state) {
+        setLiveState(state);
+        setMergeAlerts([]);
+      }
     });
 
     return () => {
@@ -125,14 +141,66 @@ export function useGameSocket(gameId, token) {
     }
   }, [gameId]);
 
+  // ─── Sub queue actions ────────────────────────────────────────────────────
+
+  const addToQueue = useCallback(async (params) => {
+    if (!gameId) return;
+    try {
+      const res = await apiClient.post(`/game-live/${gameId}/sub-queue/add`, params);
+      if (res.data.mergeAlerts?.length > 0) setMergeAlerts(res.data.mergeAlerts);
+    } catch (err) {
+      console.error('addToQueue failed:', err.response?.data?.error || err.message);
+    }
+  }, [gameId]);
+
+  const removeFromQueue = useCallback(async (queueId) => {
+    if (!gameId) return;
+    try {
+      await apiClient.delete(`/game-live/${gameId}/sub-queue/${queueId}`);
+    } catch (err) {
+      console.error('removeFromQueue failed:', err.response?.data?.error || err.message);
+    }
+  }, [gameId]);
+
+  const removeMoveFromQueue = useCallback(async (queueId, moveId) => {
+    if (!gameId) return;
+    try {
+      await apiClient.delete(`/game-live/${gameId}/sub-queue/${queueId}/moves/${moveId}`);
+    } catch (err) {
+      console.error('removeMoveFromQueue failed:', err.response?.data?.error || err.message);
+    }
+  }, [gameId]);
+
+  const activateQueue = useCallback(async () => {
+    if (!gameId) return;
+    setActivating(true);
+    try {
+      await apiClient.post(`/game-live/${gameId}/batch-sub`);
+      setMergeAlerts([]);
+    } catch (err) {
+      console.error('activateQueue failed:', err.response?.data?.error || err.message);
+    } finally {
+      setActivating(false);
+    }
+  }, [gameId]);
+
+  const dismissMergeAlerts = useCallback(() => setMergeAlerts([]), []);
+
   return {
     connected,
     liveState,
     clockTime,
     events,
+    mergeAlerts,
+    activating,
     startClock,
     stopClock,
     logGoal,
     makeSubstitution,
+    addToQueue,
+    removeFromQueue,
+    removeMoveFromQueue,
+    activateQueue,
+    dismissMergeAlerts,
   };
 }

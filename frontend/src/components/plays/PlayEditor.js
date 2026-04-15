@@ -1,6 +1,9 @@
 import React, { useReducer, useRef, useState } from 'react';
 import { useToast } from '../../context/ToastContext.js';
 import FieldSVG from './FieldSVG.js';
+import './PlayEditor.css';
+
+// ─── State / reducer ─────────────────────────────────────────────────────────
 
 const initialDiagramState = {
   format: 'half_field',
@@ -17,455 +20,325 @@ const initialDiagramState = {
 function diagramReducer(state, action) {
   switch (action.type) {
     case 'ADD_PLAYER': {
-      const newState = {
-        ...state,
-        players: [...state.players, action.payload],
-      };
-      return {
-        ...newState,
-        history: [...state.history, newState],
-        redoStack: [],
-      };
+      const newState = { ...state, players: [...state.players, action.payload] };
+      return { ...newState, history: [...state.history, newState], redoStack: [] };
     }
-
     case 'MOVE_PLAYER': {
       const newState = {
         ...state,
-        players: state.players.map((p) =>
+        players: state.players.map(p =>
           p.id === action.payload.id ? { ...p, x: action.payload.x, y: action.payload.y } : p
         ),
       };
-      return {
-        ...newState,
-        history: [...state.history, newState],
-        redoStack: [],
-      };
+      return { ...newState, history: [...state.history, newState], redoStack: [] };
     }
-
     case 'REMOVE_PLAYER': {
-      const newState = {
-        ...state,
-        players: state.players.filter((p) => p.id !== action.payload),
-      };
-      return {
-        ...newState,
-        history: [...state.history, newState],
-        redoStack: [],
-      };
+      const newState = { ...state, players: state.players.filter(p => p.id !== action.payload) };
+      return { ...newState, history: [...state.history, newState], redoStack: [] };
     }
-
-    case 'START_ARROW': {
-      return {
-        ...state,
-        drawingArrow: { fromPlayerId: action.payload, points: [] },
-      };
-    }
-
-    case 'ADD_ARROW_POINT': {
+    case 'START_ARROW':
+      return { ...state, drawingArrow: { fromPlayerId: action.payload, points: [] } };
+    case 'ADD_ARROW_POINT':
       if (!state.drawingArrow) return state;
       return {
         ...state,
-        drawingArrow: {
-          ...state.drawingArrow,
-          points: [...state.drawingArrow.points, action.payload],
-        },
+        drawingArrow: { ...state.drawingArrow, points: [...state.drawingArrow.points, action.payload] },
       };
-    }
-
     case 'FINISH_ARROW': {
       if (!state.drawingArrow || state.drawingArrow.points.length === 0) {
         return { ...state, drawingArrow: null };
       }
-
       const newArrow = {
         id: `arr-${Date.now()}`,
         from: state.drawingArrow.fromPlayerId,
         points: state.drawingArrow.points,
         type: state.arrowType,
       };
-
-      const newState = {
-        ...state,
-        arrows: [...state.arrows, newArrow],
-        drawingArrow: null,
-      };
-
-      return {
-        ...newState,
-        history: [...state.history, newState],
-        redoStack: [],
-      };
+      const newState = { ...state, arrows: [...state.arrows, newArrow], drawingArrow: null };
+      return { ...newState, history: [...state.history, newState], redoStack: [] };
     }
-
     case 'REMOVE_ARROW': {
-      const newState = {
-        ...state,
-        arrows: state.arrows.filter((a) => a.id !== action.payload),
-      };
-      return {
-        ...newState,
-        history: [...state.history, newState],
-        redoStack: [],
-      };
+      const newState = { ...state, arrows: state.arrows.filter(a => a.id !== action.payload) };
+      return { ...newState, history: [...state.history, newState], redoStack: [] };
     }
-
     case 'ADD_TEXT': {
-      const newState = {
-        ...state,
-        text_labels: [...state.text_labels, action.payload],
-      };
-      return {
-        ...newState,
-        history: [...state.history, newState],
-        redoStack: [],
-      };
+      const newState = { ...state, text_labels: [...state.text_labels, action.payload] };
+      return { ...newState, history: [...state.history, newState], redoStack: [] };
     }
-
     case 'REMOVE_TEXT': {
-      const newState = {
-        ...state,
-        text_labels: state.text_labels.filter((t) => t.id !== action.payload),
-      };
-      return {
-        ...newState,
-        history: [...state.history, newState],
-        redoStack: [],
-      };
+      const newState = { ...state, text_labels: state.text_labels.filter(t => t.id !== action.payload) };
+      return { ...newState, history: [...state.history, newState], redoStack: [] };
     }
-
-    case 'SET_TOOL':
-      return { ...state, selectedTool: action.payload };
-
-    case 'SET_ARROW_TYPE':
-      return { ...state, arrowType: action.payload };
-
-    case 'SET_FORMAT':
-      return { ...state, format: action.payload };
-
+    case 'SET_TOOL':       return { ...state, selectedTool: action.payload };
+    case 'SET_ARROW_TYPE': return { ...state, arrowType: action.payload };
+    case 'SET_FORMAT':     return { ...state, format: action.payload };
     case 'UNDO': {
       if (state.history.length === 0) return state;
-      const previousState = state.history[state.history.length - 1];
+      const prev = state.history[state.history.length - 1];
       return {
-        ...previousState,
-        redoStack: [
-          ...state.redoStack,
-          {
-            format: state.format,
-            players: state.players,
-            arrows: state.arrows,
-            text_labels: state.text_labels,
-          },
-        ],
+        ...prev,
+        redoStack: [...state.redoStack, {
+          format: state.format, players: state.players,
+          arrows: state.arrows, text_labels: state.text_labels,
+        }],
         history: state.history.slice(0, -1),
       };
     }
-
     case 'REDO': {
       if (state.redoStack.length === 0) return state;
-      const nextState = state.redoStack[state.redoStack.length - 1];
+      const next = state.redoStack[state.redoStack.length - 1];
       return {
-        ...nextState,
+        ...next,
         selectedTool: state.selectedTool,
         arrowType: state.arrowType,
-        history: [...state.history, nextState],
+        history: [...state.history, next],
         redoStack: state.redoStack.slice(0, -1),
         drawingArrow: null,
       };
     }
-
     case 'LOAD_DIAGRAM':
       return {
         ...action.payload,
-        history: [],
-        redoStack: [],
-        selectedTool: 'select',
-        arrowType: 'run',
-        drawingArrow: null,
+        history: [], redoStack: [],
+        selectedTool: 'select', arrowType: 'run', drawingArrow: null,
       };
-
     default:
       return state;
   }
 }
 
+// ─── Position palette ────────────────────────────────────────────────────────
+
+const POSITIONS = [
+  { role: 'Attack',  label: 'A1',   color: '#e63946' },
+  { role: 'Attack',  label: 'A2',   color: '#e63946' },
+  { role: 'Attack',  label: 'A3',   color: '#e63946' },
+  { role: 'Midfield',label: 'M1',   color: '#457b9d' },
+  { role: 'Midfield',label: 'M2',   color: '#457b9d' },
+  { role: 'Midfield',label: 'M3',   color: '#457b9d' },
+  { role: 'Defense', label: 'D1',   color: '#1d6fa4' },
+  { role: 'Defense', label: 'D2',   color: '#1d6fa4' },
+  { role: 'Defense', label: 'D3',   color: '#1d6fa4' },
+  { role: 'Goalie',  label: 'G',    color: '#c9a227' },
+  { role: 'FOGO',    label: 'FOGO', color: '#a8dadc' },
+];
+
+// Fixed SVG render size — the canvas wraps in an overflow-scroll container on mobile
+const SVG_W = 800;
+const SVG_H = 400;
+
 /**
- * PlayEditor - Core play diagram editor component
- * Manages SVG canvas, toolbar, and save panel
+ * PlayEditor — Core play diagram editor.
+ * Dark CoachIQ theme. Mobile-responsive: toolbar scrolls horizontally,
+ * canvas scrolls on phone, details panel stacks below on portrait.
  */
 export default function PlayEditor({ play, teamId, onSave, onCancel }) {
   const toast = useToast();
+
   const [diagram, dispatch] = useReducer(diagramReducer, initialDiagramState, (initial) => {
-    if (play && play.diagram_data) {
+    if (play?.diagram_data) {
       return {
         ...initial,
-        format: play.diagram_data.format || 'half_field',
-        players: play.diagram_data.players || [],
-        arrows: play.diagram_data.arrows || [],
+        format:      play.diagram_data.format      || 'half_field',
+        players:     play.diagram_data.players     || [],
+        arrows:      play.diagram_data.arrows      || [],
         text_labels: play.diagram_data.text_labels || [],
       };
     }
     return initial;
   });
 
-  const [title, setTitle] = useState(play?.title || '');
+  const [title,        setTitle]        = useState(play?.title         || '');
   const [situationTag, setSituationTag] = useState(play?.situation_tag || '');
-  const [notes, setNotes] = useState(play?.notes || '');
-  const canvasRef = useRef(null);
+  const [notes,        setNotes]        = useState(play?.notes         || '');
   const [hoveredPlayer, setHoveredPlayer] = useState(null);
 
-  const POSITIONS = [
-    { role: 'Attack', label: 'A1', color: '#e63946' },
-    { role: 'Attack', label: 'A2', color: '#e63946' },
-    { role: 'Attack', label: 'A3', color: '#e63946' },
-    { role: 'Midfield', label: 'M1', color: '#457b9d' },
-    { role: 'Midfield', label: 'M2', color: '#457b9d' },
-    { role: 'Midfield', label: 'M3', color: '#457b9d' },
-    { role: 'Defense', label: 'D1', color: '#1d3557' },
-    { role: 'Defense', label: 'D2', color: '#1d3557' },
-    { role: 'Defense', label: 'D3', color: '#1d3557' },
-    { role: 'Goalie', label: 'G', color: '#f1faee' },
-    { role: 'FOGO', label: 'FOGO', color: '#a8dadc' },
-  ];
+  const canvasRef = useRef(null); // attached to the container div (same size as SVG)
 
-  const addPlayer = (position) => {
-    if (diagram.players.length >= 11) return;
-    dispatch({
-      type: 'ADD_PLAYER',
-      payload: {
-        id: `p-${Date.now()}`,
-        x: 0.5,
-        y: 0.5,
-        label: position.label,
-        role: position.role,
-        color: position.color,
-      },
-    });
-  };
+  // ─── Coordinate helpers ─────────────────────────────────
 
-  const handleCanvasClick = (e) => {
-    if (diagram.selectedTool === 'select') return;
+  const viewBoxW = diagram.format === 'full_field' ? 100 : 50;
+  const viewBoxH = 40;
 
-    const svg = canvasRef.current;
-    const rect = svg.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width);
-    const y = ((e.clientY - rect.top) / rect.height);
+  /** Convert a 0-1 fraction to SVG viewBox units */
+  function toSVG(fx, fy) {
+    return { cx: fx * viewBoxW, cy: fy * viewBoxH };
+  }
 
-    if (diagram.selectedTool === 'text') {
-      const text = prompt('Enter text label:');
-      if (text) {
-        dispatch({
-          type: 'ADD_TEXT',
-          payload: {
-            id: `t-${Date.now()}`,
-            x,
-            y,
-            text,
-          },
-        });
-      }
+  /** Convert a pointer event position (relative to canvas div) into 0-1 fractions */
+  function toFraction(clientX, clientY) {
+    const rect = canvasRef.current.getBoundingClientRect();
+    return {
+      x: Math.min(1, Math.max(0, (clientX - rect.left)  / rect.width)),
+      y: Math.min(1, Math.max(0, (clientY - rect.top)   / rect.height)),
+    };
+  }
+
+  // ─── Canvas interactions ────────────────────────────────
+
+  function handleCanvasPointerDown(e) {
+    // Prevent scroll-pan from interfering with arrow drawing
+    if (diagram.selectedTool === 'arrow' && diagram.drawingArrow) {
+      e.preventDefault();
     }
-  };
+  }
 
-  const handlePlayerMouseDown = (playerId) => {
+  function handleCanvasClick(e) {
+    if (diagram.selectedTool !== 'text') return;
+    const { x, y } = toFraction(e.clientX, e.clientY);
+    const text = window.prompt('Enter text label:');
+    if (text?.trim()) {
+      dispatch({ type: 'ADD_TEXT', payload: { id: `t-${Date.now()}`, x, y, text: text.trim() } });
+    }
+  }
+
+  function handleCanvasPointerMove(e) {
+    if (diagram.selectedTool === 'arrow' && diagram.drawingArrow) {
+      // Arrow preview: add points as the pointer drags
+      // Throttle by only recording every ~8px of movement (optional)
+      const { x, y } = toFraction(e.clientX, e.clientY);
+      dispatch({ type: 'ADD_ARROW_POINT', payload: [x, y] });
+    }
+  }
+
+  function handleCanvasPointerUp() {
+    if (diagram.selectedTool === 'arrow' && diagram.drawingArrow) {
+      dispatch({ type: 'FINISH_ARROW' });
+    }
+  }
+
+  function handlePlayerPointerDown(e, playerId) {
+    e.stopPropagation();
     if (diagram.selectedTool === 'arrow') {
       dispatch({ type: 'START_ARROW', payload: playerId });
     } else if (diagram.selectedTool === 'delete') {
       dispatch({ type: 'REMOVE_PLAYER', payload: playerId });
     }
-  };
+  }
 
-  // eslint-disable-next-line no-unused-vars
-  const handleCanvasMouseMove = (e) => {
-    if (diagram.selectedTool === 'arrow' && diagram.drawingArrow) {
-      const svg = canvasRef.current;
-      const rect = svg.getBoundingClientRect();
-      // Coordinates for future arrow preview rendering
-      void ((e.clientX - rect.left) / rect.width);
-      void ((e.clientY - rect.top) / rect.height);
-    }
-  };
-
-  const handleCanvasMouseUp = () => {
-    if (diagram.selectedTool === 'arrow' && diagram.drawingArrow) {
-      dispatch({ type: 'FINISH_ARROW' });
-    }
-  };
+  // ─── Save / export ──────────────────────────────────────
 
   const handleExportPNG = async () => {
     try {
-      const svg = canvasRef.current;
-      const canvas = document.createElement('canvas');
-      canvas.width = 1200;
-      canvas.height = 600;
-      const ctx = canvas.getContext('2d');
-
-      // Fill background
+      const svgEl = canvasRef.current?.querySelector('svg');
+      if (!svgEl) return;
+      const canvas  = document.createElement('canvas');
+      canvas.width  = SVG_W;
+      canvas.height = SVG_H;
+      const ctx     = canvas.getContext('2d');
       ctx.fillStyle = '#1a5c1a';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      // Render SVG to canvas
-      const svgData = new XMLSerializer().serializeToString(svg);
-      const img = new Image();
+      const svgData = new XMLSerializer().serializeToString(svgEl);
+      const img     = new Image();
       img.onload = () => {
         ctx.drawImage(img, 0, 0);
-
-        // Trigger download
         const link = document.createElement('a');
-        link.href = canvas.toDataURL('image/png');
+        link.href  = canvas.toDataURL('image/png');
         link.download = `${title || 'play'}.png`;
         link.click();
       };
-      img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
+      img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
     } catch (err) {
       console.error('Export failed:', err);
       toast.error('Failed to export PNG');
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!title.trim()) {
       toast.warning('Please enter a play title');
       return;
     }
-
-    const playData = {
+    onSave({
       title,
       situationTag: situationTag || undefined,
-      notes: notes || undefined,
+      notes:        notes        || undefined,
       diagramData: {
-        format: diagram.format,
-        players: diagram.players,
-        arrows: diagram.arrows,
+        format:      diagram.format,
+        players:     diagram.players,
+        arrows:      diagram.arrows,
         text_labels: diagram.text_labels,
       },
       teamId,
-    };
-
-    onSave(playData);
+    });
   };
 
-  // Normalize coordinates based on SVG dimensions
-  const svgWidth = 800;
-  const svgHeight = 400;
-
-  const viewBoxWidth = diagram.format === 'full_field' ? 100 : 50;
-  const scaleX = svgWidth / viewBoxWidth;
-  const scaleY = svgHeight / 40;
+  // ─── Render ─────────────────────────────────────────────
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#f9f9f9' }}>
-      {/* Toolbar */}
-      <div style={{ padding: '12px', backgroundColor: '#fff', borderBottom: '1px solid #ddd', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            onClick={() => dispatch({ type: 'SET_FORMAT', payload: 'half_field' })}
-            style={{
-              padding: '6px 12px',
-              backgroundColor: diagram.format === 'half_field' ? '#3b82f6' : '#e5e7eb',
-              color: diagram.format === 'half_field' ? '#fff' : '#000',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '12px',
-              fontWeight: '600',
-              minHeight: '44px',
-            }}
-          >
-            Half Field
-          </button>
-          <button
-            onClick={() => dispatch({ type: 'SET_FORMAT', payload: 'full_field' })}
-            style={{
-              padding: '6px 12px',
-              backgroundColor: diagram.format === 'full_field' ? '#3b82f6' : '#e5e7eb',
-              color: diagram.format === 'full_field' ? '#fff' : '#000',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '12px',
-              fontWeight: '600',
-              minHeight: '44px',
-            }}
-          >
-            Full Field
-          </button>
+    <div className="play-editor">
+
+      {/* ── Toolbar ─────────────────────────────────────── */}
+      <div className="editor-toolbar">
+
+        {/* Field format */}
+        <div className="editor-toolbar-group">
+          {['half_field', 'full_field'].map(f => (
+            <button
+              key={f}
+              className={`editor-btn ${diagram.format === f ? 'editor-btn-active-blue' : 'editor-btn-default'}`}
+              onClick={() => dispatch({ type: 'SET_FORMAT', payload: f })}
+            >
+              {f === 'half_field' ? 'Half' : 'Full'}
+            </button>
+          ))}
         </div>
 
-        <div style={{ width: '1px', height: '24px', backgroundColor: '#ddd' }} />
+        <div className="editor-toolbar-divider" />
 
-        {/* Add player buttons */}
-        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+        {/* Player position buttons */}
+        <div className="editor-toolbar-group">
           {POSITIONS.map((pos, idx) => (
             <button
               key={idx}
-              onClick={() => addPlayer(pos)}
-              disabled={diagram.players.length >= 11}
-              style={{
-                padding: '4px 8px',
-                fontSize: '11px',
-                backgroundColor: pos.color,
-                color: '#fff',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: diagram.players.length >= 11 ? 'not-allowed' : 'pointer',
-                opacity: diagram.players.length >= 11 ? 0.5 : 1,
-                minHeight: '44px',
-                fontWeight: '600',
+              className="editor-btn editor-btn-player"
+              style={{ backgroundColor: pos.color }}
+              onClick={() => {
+                if (diagram.players.length >= 11) return;
+                dispatch({
+                  type: 'ADD_PLAYER',
+                  payload: { id: `p-${Date.now()}-${idx}`, x: 0.5, y: 0.5, label: pos.label, role: pos.role, color: pos.color },
+                });
               }}
+              disabled={diagram.players.length >= 11}
+              title={`Add ${pos.label}`}
             >
               {pos.label}
             </button>
           ))}
         </div>
 
-        <div style={{ width: '1px', height: '24px', backgroundColor: '#ddd' }} />
+        <div className="editor-toolbar-divider" />
 
-        {/* Tool buttons */}
-        <div style={{ display: 'flex', gap: '6px' }}>
-          {['select', 'arrow', 'text', 'delete'].map((tool) => (
+        {/* Active tool */}
+        <div className="editor-toolbar-group">
+          {[
+            { key: 'select', icon: '◆', label: 'Select' },
+            { key: 'arrow',  icon: '→', label: 'Arrow'  },
+            { key: 'text',   icon: 'Aa', label: 'Text'  },
+            { key: 'delete', icon: '✕', label: 'Delete' },
+          ].map(({ key, icon, label }) => (
             <button
-              key={tool}
-              onClick={() => {
-                dispatch({ type: 'SET_TOOL', payload: tool });
-              }}
-              style={{
-                padding: '6px 12px',
-                backgroundColor: diagram.selectedTool === tool ? '#8b5cf6' : '#e5e7eb',
-                color: diagram.selectedTool === tool ? '#fff' : '#000',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '12px',
-                fontWeight: '600',
-                minHeight: '44px',
-                textTransform: 'capitalize',
-              }}
+              key={key}
+              className={`editor-btn ${diagram.selectedTool === key ? 'editor-btn-tool-active' : 'editor-btn-tool'}`}
+              onClick={() => dispatch({ type: 'SET_TOOL', payload: key })}
+              title={label}
             >
-              {tool === 'arrow' ? '→' : tool === 'text' ? 'Aa' : tool === 'delete' ? '✕' : '◆'}
+              {icon}
             </button>
           ))}
         </div>
 
+        {/* Arrow type sub-toolbar */}
         {diagram.selectedTool === 'arrow' && (
           <>
-            <div style={{ width: '1px', height: '24px', backgroundColor: '#ddd' }} />
-            <div style={{ display: 'flex', gap: '6px' }}>
-              {['run', 'pass', 'screen'].map((type) => (
+            <div className="editor-toolbar-divider" />
+            <div className="editor-toolbar-group">
+              {['run', 'pass', 'screen'].map(type => (
                 <button
                   key={type}
+                  className={`editor-btn ${diagram.arrowType === type ? 'editor-btn-arrow-active' : 'editor-btn-arrow-type'}`}
                   onClick={() => dispatch({ type: 'SET_ARROW_TYPE', payload: type })}
-                  style={{
-                    padding: '6px 12px',
-                    backgroundColor: diagram.arrowType === type ? '#f59e0b' : '#e5e7eb',
-                    color: diagram.arrowType === type ? '#fff' : '#000',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '12px',
-                    fontWeight: '600',
-                    minHeight: '44px',
-                    textTransform: 'capitalize',
-                  }}
                 >
                   {type}
                 </button>
@@ -474,169 +347,143 @@ export default function PlayEditor({ play, teamId, onSave, onCancel }) {
           </>
         )}
 
-        <div style={{ width: '1px', height: '24px', backgroundColor: '#ddd' }} />
+        <div className="editor-toolbar-divider" />
 
-        {/* Undo/Redo */}
-        <button
-          onClick={() => dispatch({ type: 'UNDO' })}
-          disabled={diagram.history.length === 0}
-          style={{
-            padding: '6px 12px',
-            fontSize: '12px',
-            backgroundColor: '#e5e7eb',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: diagram.history.length === 0 ? 'not-allowed' : 'pointer',
-            opacity: diagram.history.length === 0 ? 0.5 : 1,
-            minHeight: '44px',
-          }}
-        >
-          ↶ Undo
-        </button>
-        <button
-          onClick={() => dispatch({ type: 'REDO' })}
-          disabled={diagram.redoStack.length === 0}
-          style={{
-            padding: '6px 12px',
-            fontSize: '12px',
-            backgroundColor: '#e5e7eb',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: diagram.redoStack.length === 0 ? 'not-allowed' : 'pointer',
-            opacity: diagram.redoStack.length === 0 ? 0.5 : 1,
-            minHeight: '44px',
-          }}
-        >
-          ↷ Redo
-        </button>
+        {/* Undo / Redo */}
+        <div className="editor-toolbar-group">
+          <button
+            className="editor-btn editor-btn-utility"
+            onClick={() => dispatch({ type: 'UNDO' })}
+            disabled={diagram.history.length === 0}
+            title="Undo"
+          >
+            ↶
+          </button>
+          <button
+            className="editor-btn editor-btn-utility"
+            onClick={() => dispatch({ type: 'REDO' })}
+            disabled={diagram.redoStack.length === 0}
+            title="Redo"
+          >
+            ↷
+          </button>
+        </div>
+
       </div>
 
-      {/* Canvas area */}
-      <div style={{ flex: 1, display: 'flex', padding: '16px', gap: '16px', overflow: 'auto' }}>
-        {/* Main canvas */}
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #ddd' }}>
+      {/* ── Body: canvas + details ───────────────────────── */}
+      <div className="editor-body">
+
+        {/* SVG canvas (scrollable on narrow screens) */}
+        <div className="editor-canvas-area">
           <div
             ref={canvasRef}
+            className="editor-canvas-wrap"
+            style={{ width: SVG_W, height: SVG_H }}
             onClickCapture={handleCanvasClick}
-            onMouseMove={handleCanvasMouseMove}
-            onMouseUp={handleCanvasMouseUp}
-            onMouseLeave={handleCanvasMouseUp}
-            style={{ position: 'relative' }}
+            onPointerDown={handleCanvasPointerDown}
+            onPointerMove={handleCanvasPointerMove}
+            onPointerUp={handleCanvasPointerUp}
+            onPointerLeave={handleCanvasPointerUp}
           >
-            <FieldSVG format={diagram.format} width={svgWidth} height={svgHeight}>
+            <FieldSVG format={diagram.format} width={SVG_W} height={SVG_H}>
+
               {/* Players */}
-              {diagram.players.map((player) => (
-                <g
-                  key={player.id}
-                  onMouseDown={() => handlePlayerMouseDown(player.id)}
-                  onMouseEnter={() => setHoveredPlayer(player.id)}
-                  onMouseLeave={() => setHoveredPlayer(null)}
-                  style={{ cursor: diagram.selectedTool === 'arrow' || diagram.selectedTool === 'delete' ? 'pointer' : 'grab' }}
-                >
-                  <circle
-                    cx={player.x * scaleX * (diagram.format === 'full_field' ? 100 : 50) / (diagram.format === 'full_field' ? 100 : 50)}
-                    cy={player.y * scaleY}
-                    r="2"
-                    fill={player.color}
-                    stroke={hoveredPlayer === player.id ? '#fff' : '#000'}
-                    strokeWidth="0.2"
-                  />
-                  <text
-                    x={player.x * scaleX * (diagram.format === 'full_field' ? 100 : 50) / (diagram.format === 'full_field' ? 100 : 50)}
-                    y={player.y * scaleY}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    fontSize="1"
-                    fill="#fff"
-                    fontWeight="bold"
-                  >
-                    {player.label}
-                  </text>
-                </g>
-              ))}
-
-              {/* Arrows */}
-              {diagram.arrows.map((arrow) => {
-                const player = diagram.players.find((p) => p.id === arrow.from);
-                if (!player) return null;
-
-                const startX = player.x * scaleX * (diagram.format === 'full_field' ? 100 : 50) / (diagram.format === 'full_field' ? 100 : 50);
-                const startY = player.y * scaleY;
-
+              {diagram.players.map(player => {
+                const { cx, cy } = toSVG(player.x, player.y);
                 return (
-                  <g key={arrow.id}>
-                    <polyline
-                      points={[
-                        `${startX},${startY}`,
-                        ...arrow.points.map((p) => `${p[0] * scaleX * (diagram.format === 'full_field' ? 100 : 50) / (diagram.format === 'full_field' ? 100 : 50)},${p[1] * scaleY}`),
-                      ].join(' ')}
-                      fill="none"
-                      stroke="#fff"
-                      strokeWidth="0.3"
-                      strokeDasharray={arrow.type === 'pass' ? '1,0.5' : arrow.type === 'screen' ? '0.3,0.3' : 'none'}
+                  <g
+                    key={player.id}
+                    onPointerDown={e => handlePlayerPointerDown(e, player.id)}
+                    onPointerEnter={() => setHoveredPlayer(player.id)}
+                    onPointerLeave={() => setHoveredPlayer(null)}
+                    style={{ cursor: diagram.selectedTool === 'arrow' || diagram.selectedTool === 'delete' ? 'pointer' : 'grab' }}
+                  >
+                    <circle
+                      cx={cx} cy={cy} r="2"
+                      fill={player.color}
+                      stroke={hoveredPlayer === player.id ? '#fff' : '#000'}
+                      strokeWidth="0.25"
                     />
+                    <text
+                      x={cx} y={cy}
+                      textAnchor="middle" dominantBaseline="middle"
+                      fontSize="1.2" fill="#fff" fontWeight="bold"
+                    >
+                      {player.label}
+                    </text>
                   </g>
                 );
               })}
 
+              {/* Arrows */}
+              {diagram.arrows.map(arrow => {
+                const player = diagram.players.find(p => p.id === arrow.from);
+                if (!player) return null;
+                const { cx: sx, cy: sy } = toSVG(player.x, player.y);
+                const pointStr = [
+                  `${sx},${sy}`,
+                  ...arrow.points.map(([fx, fy]) => {
+                    const { cx, cy } = toSVG(fx, fy);
+                    return `${cx},${cy}`;
+                  }),
+                ].join(' ');
+                return (
+                  <polyline
+                    key={arrow.id}
+                    points={pointStr}
+                    fill="none"
+                    stroke="#fff"
+                    strokeWidth="0.35"
+                    strokeDasharray={
+                      arrow.type === 'pass'   ? '1,0.5' :
+                      arrow.type === 'screen' ? '0.3,0.3' :
+                      undefined
+                    }
+                  />
+                );
+              })}
+
               {/* Text labels */}
-              {diagram.text_labels.map((label) => (
-                <g key={label.id} onMouseDown={() => diagram.selectedTool === 'delete' && dispatch({ type: 'REMOVE_TEXT', payload: label.id })}>
-                  <text
-                    x={label.x * scaleX * (diagram.format === 'full_field' ? 100 : 50) / (diagram.format === 'full_field' ? 100 : 50)}
-                    y={label.y * scaleY}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    fontSize="1.5"
-                    fill="#fff"
-                    fontWeight="bold"
+              {diagram.text_labels.map(label => {
+                const { cx, cy } = toSVG(label.x, label.y);
+                return (
+                  <g
+                    key={label.id}
+                    onPointerDown={() => diagram.selectedTool === 'delete' && dispatch({ type: 'REMOVE_TEXT', payload: label.id })}
+                    style={{ cursor: diagram.selectedTool === 'delete' ? 'pointer' : 'default' }}
                   >
-                    {label.text}
-                  </text>
-                </g>
-              ))}
+                    <text
+                      x={cx} y={cy}
+                      textAnchor="middle" dominantBaseline="middle"
+                      fontSize="1.8" fill="#fff" fontWeight="bold"
+                    >
+                      {label.text}
+                    </text>
+                  </g>
+                );
+              })}
+
             </FieldSVG>
           </div>
         </div>
 
-        {/* Save panel */}
-        <div style={{ width: '250px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {/* Details / save panel */}
+        <div className="editor-details">
+
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', marginBottom: '4px' }}>
-              Title
-            </label>
+            <label className="editor-details-label">Title</label>
             <input
               type="text"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Enter play title"
-              style={{
-                width: '100%',
-                padding: '8px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                fontSize: '13px',
-                boxSizing: 'border-box',
-              }}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="Play name"
             />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', marginBottom: '4px' }}>
-              Situation Tag
-            </label>
-            <select
-              value={situationTag}
-              onChange={(e) => setSituationTag(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                fontSize: '13px',
-                boxSizing: 'border-box',
-              }}
-            >
+            <label className="editor-details-label">Situation</label>
+            <select value={situationTag} onChange={e => setSituationTag(e.target.value)}>
               <option value="">None</option>
               <option value="emo">EMO</option>
               <option value="man_down">Man-Down</option>
@@ -650,76 +497,26 @@ export default function PlayEditor({ play, teamId, onSave, onCancel }) {
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', marginBottom: '4px' }}>
-              Notes
-            </label>
+            <label className="editor-details-label">Notes</label>
             <textarea
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Add play notes..."
-              style={{
-                width: '100%',
-                padding: '8px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                fontSize: '13px',
-                boxSizing: 'border-box',
-                minHeight: '80px',
-                resize: 'vertical',
-              }}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="Coaching notes, keys to success…"
             />
           </div>
 
-          <button
-            onClick={handleExportPNG}
-            style={{
-              padding: '8px',
-              backgroundColor: '#06b6d4',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '13px',
-              fontWeight: '600',
-              minHeight: '44px',
-            }}
-          >
-            Export PNG
-          </button>
-
-          <button
-            onClick={handleSave}
-            style={{
-              padding: '8px',
-              backgroundColor: '#22c55e',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '13px',
-              fontWeight: '600',
-              minHeight: '44px',
-            }}
-          >
+          <button className="editor-save-btn editor-save-btn-primary" onClick={handleSave}>
             Save Play
           </button>
 
-          <button
-            onClick={onCancel}
-            style={{
-              padding: '8px',
-              backgroundColor: '#e5e7eb',
-              color: '#000',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '13px',
-              fontWeight: '600',
-              minHeight: '44px',
-            }}
-          >
+          <button className="editor-save-btn editor-save-btn-export" onClick={handleExportPNG}>
+            Export PNG
+          </button>
+
+          <button className="editor-save-btn editor-save-btn-cancel" onClick={onCancel}>
             Cancel
           </button>
+
         </div>
       </div>
     </div>

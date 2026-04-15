@@ -1,0 +1,383 @@
+/* ═══════════════════════════════════════════════════════════
+   PlayEditor — Responsive diagram editor
+   iPad-first, degrades to phone portrait.
+   Dark CoachIQ theme throughout.
+   ═══════════════════════════════════════════════════════════ */
+
+/* ─── Root container ─────────────────────────────────────── */
+
+.play-editor {
+  display: flex;
+  flex-direction: column;
+  /* Fill the space below the fixed nav bar */
+  height: calc(100dvh - var(--nav-height));
+  background: var(--color-black);
+  color: var(--color-text-primary);
+  overflow: hidden;
+  /* Contain stacking context so dropdowns render correctly */
+  position: relative;
+}
+
+/* ─── Toolbar ────────────────────────────────────────────── */
+
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--color-surface-0);
+  border-bottom: 1px solid var(--color-surface-3);
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-shrink: 0;
+  -webkit-overflow-scrolling: touch;
+  /* Hide scrollbar — still scrollable via touch */
+  scrollbar-width: none;
+}
+.editor-toolbar::-webkit-scrollbar { display: none; }
+
+.editor-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex-shrink: 0;
+}
+
+.editor-toolbar-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--color-surface-3);
+  flex-shrink: 0;
+  align-self: center;
+}
+
+/* ─── Toolbar buttons ────────────────────────────────────── */
+
+.editor-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 12px;
+  min-height: 40px;
+  min-width: 40px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: var(--text-xs);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--ease-base);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.editor-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Format / field layout buttons */
+.editor-btn-default {
+  background: var(--color-surface-1);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-surface-3);
+}
+.editor-btn-default:hover:not(:disabled) {
+  background: var(--color-surface-2);
+  color: var(--color-text-primary);
+}
+.editor-btn-active-blue {
+  background: var(--color-blue-bg);
+  color: var(--color-blue);
+  border: 1px solid var(--color-blue-border);
+}
+
+/* Tool (select / arrow / text / delete) */
+.editor-btn-tool {
+  background: var(--color-surface-1);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-surface-3);
+  font-size: 15px;
+}
+.editor-btn-tool:hover:not(:disabled) {
+  background: var(--color-surface-2);
+  color: var(--color-text-primary);
+}
+.editor-btn-tool-active {
+  background: rgba(139, 92, 246, 0.18);
+  color: #a78bfa;
+  border: 1px solid rgba(139, 92, 246, 0.35);
+}
+
+/* Arrow type buttons */
+.editor-btn-arrow-type {
+  background: var(--color-surface-1);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-surface-3);
+}
+.editor-btn-arrow-type:hover:not(:disabled) {
+  background: var(--color-surface-2);
+  color: var(--color-text-primary);
+}
+.editor-btn-arrow-active {
+  background: var(--color-amber-bg);
+  color: var(--color-amber);
+  border: 1px solid var(--color-amber-border);
+}
+
+/* Undo / redo */
+.editor-btn-utility {
+  background: var(--color-surface-1);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-surface-3);
+  font-size: 15px;
+}
+.editor-btn-utility:hover:not(:disabled) {
+  background: var(--color-surface-2);
+}
+
+/* Player position badges */
+.editor-btn-player {
+  border: none;
+  color: #fff;
+  font-size: 11px;
+  min-height: 40px;
+  padding: 4px 10px;
+  opacity: 1;
+}
+.editor-btn-player:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ─── Body: canvas + side panel ──────────────────────────── */
+
+.editor-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0; /* allow flex children to shrink below content size */
+}
+
+/* ─── Canvas area ─────────────────────────────────────────── */
+
+.editor-canvas-area {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-2);
+  /* Scroll the 800px canvas horizontally on narrow screens */
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: var(--sp-4);
+  min-width: 0;
+  /* Prevent scroll bubbling when drawing arrows */
+  touch-action: none;
+}
+
+.editor-canvas-wrap {
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  border: 2px solid var(--color-surface-3);
+  cursor: crosshair;
+  /* pointer-events are handled by the element itself */
+}
+
+/* ─── Side panel (details / save) ────────────────────────── */
+
+.editor-details {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  background: var(--color-surface-0);
+  border-left: 1px solid var(--color-surface-3);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.editor-details-label {
+  display: block;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: var(--text-xs);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--color-gold);
+  margin-bottom: var(--sp-2);
+}
+
+.editor-details input,
+.editor-details select,
+.editor-details textarea {
+  width: 100%;
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-surface-3);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  font-weight: 300;
+  /* Prevent iOS zoom on focus (min 16px) */
+  font-size: max(16px, var(--text-sm));
+  padding: var(--sp-3);
+  min-height: var(--input-height);
+  outline: none;
+  transition: border-color var(--ease-base);
+  box-sizing: border-box;
+}
+.editor-details input:focus,
+.editor-details select:focus,
+.editor-details textarea:focus {
+  border-color: var(--color-gold-border);
+}
+.editor-details select option {
+  background: var(--color-surface-1);
+}
+.editor-details textarea {
+  min-height: 80px;
+  resize: vertical;
+  line-height: var(--leading-normal);
+}
+
+/* Action buttons inside side panel */
+.editor-save-btn {
+  width: 100%;
+  padding: var(--sp-3) var(--sp-4);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: var(--text-xs);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  min-height: 48px;
+  transition: all var(--ease-base);
+  user-select: none;
+}
+.editor-save-btn-primary {
+  background: var(--color-green);
+  color: #fff;
+}
+.editor-save-btn-primary:hover {
+  background: #16a34a;
+}
+.editor-save-btn-export {
+  background: var(--color-blue-bg);
+  color: var(--color-blue);
+  border: 1px solid var(--color-blue-border);
+}
+.editor-save-btn-export:hover {
+  background: rgba(59, 130, 246, 0.25);
+}
+.editor-save-btn-cancel {
+  background: var(--color-surface-1);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-surface-3);
+}
+.editor-save-btn-cancel:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text-primary);
+}
+
+/* ─── Mobile tab toggle (phone only) ─────────────────────── */
+
+.editor-mobile-tabs {
+  display: none;
+  background: var(--color-surface-0);
+  border-bottom: 1px solid var(--color-surface-3);
+  flex-shrink: 0;
+}
+
+.editor-mobile-tab {
+  flex: 1;
+  padding: var(--sp-3) var(--sp-4);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: var(--text-xs);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  min-height: 44px;
+  transition: color var(--ease-base), border-color var(--ease-base);
+  text-align: center;
+}
+
+.editor-mobile-tab.active {
+  color: var(--color-gold);
+  border-bottom-color: var(--color-gold);
+}
+
+/* ─── Responsive: tablet portrait ────────────────────────── */
+
+@media (max-width: 900px) {
+  .editor-details { width: 230px; padding: var(--sp-4); }
+}
+
+/* ─── Responsive: phone (<= 600px) ───────────────────────── */
+
+@media (max-width: 600px) {
+  .play-editor {
+    /* On phone: let app-content scroll naturally */
+    height: auto;
+    min-height: calc(100dvh - var(--nav-height));
+    overflow: visible;
+  }
+
+  .editor-body {
+    flex-direction: column;
+    overflow: visible;
+    height: auto;
+  }
+
+  .editor-canvas-area {
+    /* Fixed height so the canvas is usable on a phone */
+    height: 260px;
+    flex: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    justify-content: flex-start;
+    align-items: flex-start;
+    padding: var(--sp-3);
+  }
+
+  .editor-details {
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid var(--color-surface-3);
+    overflow-y: visible;
+    padding: var(--sp-4);
+    padding-bottom: calc(var(--sp-8) + var(--safe-bottom));
+  }
+
+  .editor-toolbar {
+    padding: var(--sp-2) var(--sp-3);
+    gap: var(--sp-2);
+  }
+
+  .editor-btn {
+    padding: 5px 10px;
+    font-size: 10px;
+    min-height: 38px;
+  }
+
+  .editor-btn-player {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+}

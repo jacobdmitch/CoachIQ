@@ -129,4 +129,61 @@ router.patch('/:id', authenticateToken, asyncHandler(async (req, res) => {
   res.json({ success: true, game: updated.rows[0] });
 }));
 
+// ─── GET /:gameId/situation-assignments ──────────────────────────────────────
+
+router.get('/:gameId/situation-assignments', authenticateToken, asyncHandler(async (req, res) => {
+  const gameResult = await query('SELECT team_id FROM games WHERE id = $1', [req.params.gameId]);
+  if (gameResult.rows.length === 0) throw new AppError('Game not found', 404);
+  await requireTeamAccess(req.coachId, gameResult.rows[0].team_id);
+
+  const result = await query(
+    'SELECT * FROM game_situation_assignments WHERE game_id = $1 ORDER BY situation_type',
+    [req.params.gameId]
+  );
+  res.json({ success: true, assignments: result.rows });
+}));
+
+// ─── PUT /:gameId/situation-assignments/:situationType ────────────────────────
+
+router.put('/:gameId/situation-assignments/:situationType', authenticateToken, asyncHandler(async (req, res) => {
+  const { gameId, situationType } = req.params;
+  const { playerIds } = req.body;
+
+  if (!Array.isArray(playerIds) || playerIds.length === 0) {
+    throw new AppError('playerIds must be a non-empty array', 400);
+  }
+
+  const gameResult = await query('SELECT team_id FROM games WHERE id = $1', [gameId]);
+  if (gameResult.rows.length === 0) throw new AppError('Game not found', 404);
+  await requireTeamAccess(req.coachId, gameResult.rows[0].team_id);
+
+  const result = await query(
+    `INSERT INTO game_situation_assignments (game_id, situation_type, player_ids)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (game_id, situation_type)
+     DO UPDATE SET player_ids = $3, updated_at = NOW()
+     RETURNING *`,
+    [gameId, situationType, playerIds]
+  );
+
+  res.json({ success: true, assignment: result.rows[0] });
+}));
+
+// ─── DELETE /:gameId/situation-assignments/:situationType ─────────────────────
+
+router.delete('/:gameId/situation-assignments/:situationType', authenticateToken, asyncHandler(async (req, res) => {
+  const { gameId, situationType } = req.params;
+
+  const gameResult = await query('SELECT team_id FROM games WHERE id = $1', [gameId]);
+  if (gameResult.rows.length === 0) throw new AppError('Game not found', 404);
+  await requireTeamAccess(req.coachId, gameResult.rows[0].team_id);
+
+  await query(
+    'DELETE FROM game_situation_assignments WHERE game_id = $1 AND situation_type = $2',
+    [gameId, situationType]
+  );
+
+  res.json({ success: true });
+}));
+
 export default router;

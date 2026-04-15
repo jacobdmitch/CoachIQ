@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { persistGameEvent, persistPlaytimeEntry, saveGameStateSnapshot, loadGameStateSnapshot } from '../services/gamePersistence.js';
 import { broadcastGameUpdate } from './game-sync.js';
 import { gameStates, playtimeTrackers, clockIntervals } from '../services/liveGameStore.js';
+import { resolveSituation } from '../services/situationResolver.js';
 
 const subSchema = z.object({
   playerIn: z.string().uuid(),
@@ -64,49 +65,66 @@ function stopClockInterval(gameId) {
 
 /**
  * POST /:gameId/start
- * Start a game and initialize GameStateManager
+ * Start a game and initialize GameStateManager.
+ * Accepts optional startingLineup: { goalie, field_0, field_1, ... }
+ * to pre-populate the field instead of starting with all players on bench.
  */
 router.post(
   '/:gameId/start',
   authenticateToken,
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
+    const { startingLineup } = req.body; // optional map of position → athleteId
 
-    // Fetch game from database
     const gameResult = await query('SELECT * FROM games WHERE id = $1', [gameId]);
-    if (gameResult.rows.length === 0) {
-      throw new AppError('Game not found', 404);
-    }
+    if (gameResult.rows.length === 0) throw new AppError('Game not found', 404);
     const game = gameResult.rows[0];
 
-    // Fetch roster
     const rosterResult = await query(
-      'SELECT * FROM athletes WHERE team_id = $1',
-      [game.team_id]
+      'SELECT * FROM athletes WHERE team_id = $1 AND status = $2',
+      [game.team_id, 'active']
     );
     const athletes = rosterResult.rows;
 
-    // Initialize game state manager
     const gameState = new GameStateManager(game, athletes);
     gameState.period = 1;
-    gameState.state = 'ACTIVE';
+    gameState.state  = 'ACTIVE';
+
+    const playtimeTracker = new PlaytimeTracker(athletes, 15);
+    const now = Date.now();
+
+    // Apply starting lineup if provided
+    if (startingLineup && typeof startingLineup === 'object') {
+      for (const [position, athleteId] of Object.entries(startingLineup)) {
+        if (!athleteId) continue;
+        if (!gameState.fieldPositions.hasOwnProperty(position)) continue;
+        const benchIdx = gameState.bench.indexOf(athleteId);
+        if (benchIdx === -1) continue; // not on bench (unknown athlete)
+
+        gameState.fieldPositions[position] = athleteId;
+        gameState.bench.splice(benchIdx, 1);
+        playtimeTracker.subIn(athleteId, now);
+      }
+
+      // Persist lineup to games table
+      await query(
+        'UPDATE games SET starting_lineup = $1 WHERE id = $2',
+        [JSON.stringify(startingLineup), gameId]
+      );
+    }
+
+    // Mark game as active
+    await query("UPDATE games SET status = 'active' WHERE id = $1", [gameId]);
 
     gameStates.set(gameId, gameState);
-
-    // Initialize playtime tracker
-    const playtimeTracker = new PlaytimeTracker(athletes, 15); // 15 min target
     playtimeTrackers.set(gameId, playtimeTracker);
 
-    // Persist initial state snapshot for recovery
     await saveGameStateSnapshot(gameId, req.coachId, gameState);
+    broadcastGameUpdate(gameId, 'state_update', { state: gameState.getState() });
 
-    logger.info(`Game started: ${gameId}`, { format: game.format });
+    logger.info(`Game started: ${gameId}`, { format: game.format, hasStartingLineup: !!startingLineup });
 
-    res.json({
-      success: true,
-      gameId,
-      state: gameState.getState(),
-    });
+    res.json({ success: true, gameId, state: gameState.getState() });
   })
 );
 
@@ -458,6 +476,200 @@ router.post(
     res.json({
       success: true,
       finalState: gameState.getState(),
+    });
+  })
+);
+
+// ─── Sub Queue ────────────────────────────────────────────────────────────────
+
+/**
+ * POST /:gameId/sub-queue/add
+ * Add an entry to the staging queue.
+ * Handles three types:
+ *   individual — { type, playerIn, playerOut, position }
+ *   line       — { type, lineId }    (server resolves line → moves)
+ *   situation  — { type, situationType }  (server resolves via situationResolver)
+ */
+router.post(
+  '/:gameId/sub-queue/add',
+  authenticateToken,
+  asyncHandler(async (req, res) => {
+    const { gameId } = req.params;
+    const { type } = req.body;
+
+    const gameState = gameStates.get(gameId);
+    if (!gameState) throw new AppError('Game not initialized', 400);
+
+    const playtimeTracker = playtimeTrackers.get(gameId);
+    let entry;
+
+    if (type === 'individual') {
+      const { playerIn, playerOut, position } = req.body;
+      if (!playerIn || !playerOut || !position) {
+        throw new AppError('individual type requires playerIn, playerOut, position', 400);
+      }
+      const athlete = gameState.athletes.find(a => a.id === playerIn);
+      entry = {
+        queueId:        crypto.randomUUID(),
+        type:           'individual',
+        label:          athlete ? `${athlete.first_name} ${athlete.last_name}` : 'Sub',
+        source:         'manual',
+        situationType:  null,
+        stayingPlayers: [],
+        moves: [{
+          moveId:    crypto.randomUUID(),
+          playerIn,
+          playerOut,
+          position,
+        }],
+      };
+
+    } else if (type === 'line') {
+      const { lineId } = req.body;
+      if (!lineId) throw new AppError('line type requires lineId', 400);
+
+      const lineResult = await query('SELECT * FROM lines WHERE id = $1', [lineId]);
+      if (lineResult.rows.length === 0) throw new AppError('Line not found', 404);
+
+      entry = gameState.resolveLineSwap(lineResult.rows[0]);
+
+    } else if (type === 'situation') {
+      const { situationType } = req.body;
+      if (!situationType) throw new AppError('situation type requires situationType', 400);
+
+      // Load per-game assignment for this situation
+      const assignmentResult = await query(
+        'SELECT player_ids FROM game_situation_assignments WHERE game_id = $1 AND situation_type = $2',
+        [gameId, situationType]
+      );
+      const assignedIds = assignmentResult.rows[0]?.player_ids || null;
+
+      // Fetch full athlete list for scoring (situationResolver needs skill fields)
+      const gameRecord = await query('SELECT team_id FROM games WHERE id = $1', [gameId]);
+      const athletesResult = await query(
+        'SELECT * FROM athletes WHERE team_id = $1 AND status = $2',
+        [gameRecord.rows[0].team_id, 'active']
+      );
+
+      entry = resolveSituation(
+        gameState,
+        situationType,
+        assignedIds,
+        athletesResult.rows,
+        playtimeTracker
+      );
+
+    } else {
+      throw new AppError('type must be individual, line, or situation', 400);
+    }
+
+    const { entry: added, mergeAlerts } = gameState.addToQueue(entry);
+    await saveGameStateSnapshot(gameId, req.coachId, gameState);
+    broadcastGameUpdate(gameId, 'queue_update', { subQueue: gameState.subQueue, mergeAlerts });
+
+    res.json({ success: true, entry: added, subQueue: gameState.subQueue, mergeAlerts });
+  })
+);
+
+/**
+ * DELETE /:gameId/sub-queue/:queueId
+ * Remove an entire queue entry.
+ */
+router.delete(
+  '/:gameId/sub-queue/:queueId',
+  authenticateToken,
+  asyncHandler(async (req, res) => {
+    const { gameId, queueId } = req.params;
+    const gameState = gameStates.get(gameId);
+    if (!gameState) throw new AppError('Game not initialized', 400);
+
+    gameState.removeFromQueue(queueId);
+    await saveGameStateSnapshot(gameId, req.coachId, gameState);
+    broadcastGameUpdate(gameId, 'queue_update', { subQueue: gameState.subQueue, mergeAlerts: [] });
+
+    res.json({ success: true, subQueue: gameState.subQueue });
+  })
+);
+
+/**
+ * DELETE /:gameId/sub-queue/:queueId/moves/:moveId
+ * Remove a single move from a queue entry.
+ */
+router.delete(
+  '/:gameId/sub-queue/:queueId/moves/:moveId',
+  authenticateToken,
+  asyncHandler(async (req, res) => {
+    const { gameId, queueId, moveId } = req.params;
+    const gameState = gameStates.get(gameId);
+    if (!gameState) throw new AppError('Game not initialized', 400);
+
+    gameState.removeMoveFromQueue(queueId, moveId);
+    await saveGameStateSnapshot(gameId, req.coachId, gameState);
+    broadcastGameUpdate(gameId, 'queue_update', { subQueue: gameState.subQueue, mergeAlerts: [] });
+
+    res.json({ success: true, subQueue: gameState.subQueue });
+  })
+);
+
+/**
+ * POST /:gameId/batch-sub
+ * Validate and execute all staged queue entries atomically.
+ */
+router.post(
+  '/:gameId/batch-sub',
+  authenticateToken,
+  asyncHandler(async (req, res) => {
+    const { gameId } = req.params;
+    const gameState = gameStates.get(gameId);
+    if (!gameState) throw new AppError('Game not initialized', 400);
+
+    const result = gameState.executeBatchSub();
+    if (!result.success) {
+      return res.status(400).json({ success: false, errors: result.errors });
+    }
+
+    const playtimeTracker = playtimeTrackers.get(gameId);
+    const now = Date.now();
+
+    // Record playtime for each move
+    if (playtimeTracker) {
+      for (const move of result.executedMoves) {
+        playtimeTracker.subOut(move.playerOut, now);
+        playtimeTracker.subIn(move.playerIn, now);
+      }
+    }
+
+    // Persist individual sub events for each move
+    for (const move of result.executedMoves) {
+      persistGameEvent(gameId, {
+        type:      'PLAYER_SUBBED_IN',
+        athleteId: move.playerIn,
+        timestamp: move.timestamp,
+        period:    gameState.period,
+        clockTime: gameState.clockTime,
+      });
+      persistGameEvent(gameId, {
+        type:      'PLAYER_SUBBED_OUT',
+        athleteId: move.playerOut,
+        timestamp: move.timestamp,
+        period:    gameState.period,
+        clockTime: gameState.clockTime,
+      });
+    }
+
+    await saveGameStateSnapshot(gameId, req.coachId, gameState);
+
+    broadcastGameUpdate(gameId, 'batch_substitution', {
+      event: result.event,
+      state: gameState.getState(),
+    });
+
+    logger.info(`Batch sub activated: ${gameId}, ${result.executedMoves.length} moves`);
+
+    res.json({
+      success: true,
+      event:   result.event,
+      state:   gameState.getState(),
     });
   })
 );
