@@ -221,5 +221,3 @@ export default function PlayLibrary({ teamId }) {
     </div>
   );
 }
-
-export default PlayLibrary;

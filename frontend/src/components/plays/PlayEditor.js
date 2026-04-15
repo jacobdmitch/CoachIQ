@@ -722,5 +722,3 @@ export default function PlayEditor({ play, teamId, onSave, onCancel }) {
     </div>
   );
 }
-
-export default PlayEditor;

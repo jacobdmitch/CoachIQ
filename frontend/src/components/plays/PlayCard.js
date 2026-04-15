@@ -160,5 +160,3 @@ export default function PlayCard({ play, onEdit, onDuplicate, onDelete }) {
     </div>
   );
 }
-
-export default PlayCard;

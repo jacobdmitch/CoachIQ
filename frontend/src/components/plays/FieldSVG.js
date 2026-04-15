@@ -78,5 +78,3 @@ export default function FieldSVG({ format = 'half_field', width = 800, height = 
     </svg>
   );
 }
-
-export default FieldSVG;
