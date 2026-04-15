@@ -130,6 +130,16 @@ function IconSettings() {
   );
 }
 
+function IconHelp() {
+  return (
+    <svg className="nav-tab-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="8" cy="8" r="6.5" />
+      <path d="M6 6.2c0-1.1.9-2 2-2s2 .9 2 2c0 1-.7 1.6-1.4 2-.5.3-.6.7-.6 1.1" />
+      <circle cx="8" cy="12" r="0.6" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 /* ─── Route definitions ────────────────────────────────────── */
 
 const NAV_ITEMS = [
@@ -139,6 +149,7 @@ const NAV_ITEMS = [
   { to: '/plays',     label: 'Plays',     Icon: IconPlays     },
   { to: '/practice',  label: 'Practice',  Icon: IconPractice  },
   { to: '/settings',  label: 'Settings',  Icon: IconSettings  },
+  { to: '/help',      label: 'Help',      Icon: IconHelp      },
 ];
 
 /* ─── Component ────────────────────────────────────────────── */

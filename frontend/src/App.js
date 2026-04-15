@@ -12,6 +12,7 @@ const GameMode         = lazy(() => import('./components/game/GameMode.js'));
 const PlayLibrary      = lazy(() => import('./components/plays/PlayLibrary.js'));
 const PracticeCalendar = lazy(() => import('./components/practice/PracticeCalendar.js'));
 const SettingsPage     = lazy(() => import('./components/settings/SettingsPage.js'));
+const HelpPage         = lazy(() => import('./components/help/HelpPage.js'));
 
 // Full-screen loader shown during Suspense fallback and auth check
 function PageLoader() {
@@ -98,6 +99,7 @@ export default function App() {
               <Route path="plays"                element={<PlayLibrary />} />
               <Route path="practice"             element={<PracticeCalendar />} />
               <Route path="settings"             element={<SettingsPage />} />
+              <Route path="help"                element={<HelpPage />} />
             </Route>
 
             {/* Catch-all → dashboard (or login if not authed) */}

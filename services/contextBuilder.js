@@ -1,4 +1,20 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import logger from './logger.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
+
+// Load the app help knowledge base once at startup so Line Coach can answer
+// feature questions without a separate lookup round-trip.
+let _appHelpText = '';
+try {
+  const helpPath = path.join(__dirname, '../knowledge-bases/ai/coachiq-help.md');
+  _appHelpText = fs.readFileSync(helpPath, 'utf-8');
+} catch (err) {
+  logger.warn('Could not load coachiq-help.md knowledge base:', err.message);
+}
 
 /**
  * Builds system prompt context for Claude LLM calls.
@@ -137,6 +153,10 @@ export function getSystemPrompt(format = 'standard') {
   - Defensive specialists and attackers
   - Three distinct positions: Attack, Midfield, Defense, Goalie`;
 
+  const helpSection = _appHelpText
+    ? `\n\n=== APP REFERENCE ===\nYou also have full knowledge of how the CoachIQ app works. Use the following documentation to answer any questions the coach asks about app features, navigation, or workflows.\n\n${_appHelpText}\n=== END APP REFERENCE ===`
+    : '';
+
   return `You are Line Coach, an AI assistant for lacrosse coaches running sideline operations during games.
 
 Your role:
@@ -169,7 +189,7 @@ When analyzing the game state provided:
 3. Consider recent game momentum
 4. Flag any urgent coaching decisions needed
 
-Always end recommendations with "Coach's call" to reinforce that the coach makes final decisions.`;
+Always end recommendations with "Coach's call" to reinforce that the coach makes final decisions.${helpSection}`;
 }
 
 /**
