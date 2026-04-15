@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../config/api.js';
 import { useAuth } from '../../context/AuthContext.js';
+import { useToast } from '../../context/ToastContext.js';
 import PlayCard from './PlayCard.js';
 import PlayEditor from './PlayEditor.js';
+import styles from './PlayLibrary.module.css';
 
 const SITUATION_COLORS = {
   emo: '#22c55e',
@@ -31,6 +33,7 @@ const SITUATION_LABELS = {
  */
 export default function PlayLibrary() {
   const { team } = useAuth();
+  const toast = useToast();
   const teamId = team?.id;
   const [plays, setPlays] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -49,11 +52,11 @@ export default function PlayLibrary() {
       setPlays(response.data.data || []);
     } catch (err) {
       console.error('Failed to load plays:', err);
-      alert('Failed to load plays');
+      toast.error('Failed to load plays');
     } finally {
       setLoading(false);
     }
-  }, [teamId, filter]);
+  }, [teamId, filter, toast]);
 
   // Load plays
   useEffect(() => {
@@ -65,18 +68,18 @@ export default function PlayLibrary() {
       if (editingPlay) {
         // Update existing
         await api.put(`/plays/${editingPlay.id}`, playData);
-        alert('Play updated successfully');
+        toast.success('Play updated successfully');
       } else {
         // Create new
         await api.post('/plays', playData);
-        alert('Play created successfully');
+        toast.success('Play created successfully');
       }
       setEditingPlay(null);
       setIsCreating(false);
       await loadPlays();
     } catch (err) {
       console.error('Failed to save play:', err);
-      alert('Failed to save play');
+      toast.error('Failed to save play');
     }
   };
 
@@ -85,11 +88,11 @@ export default function PlayLibrary() {
 
     try {
       await api.delete(`/plays/${play.id}`);
-      alert('Play deleted');
+      toast.success('Play deleted');
       await loadPlays();
     } catch (err) {
       console.error('Failed to delete play:', err);
-      alert('Failed to delete play');
+      toast.error('Failed to delete play');
     }
   };
 
@@ -99,11 +102,11 @@ export default function PlayLibrary() {
 
     try {
       await api.post(`/plays/${play.id}/duplicate`, { newTitle });
-      alert('Play duplicated');
+      toast.success('Play duplicated');
       await loadPlays();
     } catch (err) {
       console.error('Failed to duplicate play:', err);
-      alert('Failed to duplicate play');
+      toast.error('Failed to duplicate play');
     }
   };
 
@@ -124,45 +127,23 @@ export default function PlayLibrary() {
 
   // Library view
   return (
-    <div style={{ padding: '16px', backgroundColor: '#f9f9f9', minHeight: '100vh' }}>
+    <div className={styles.container}>
       {/* Header */}
-      <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 style={{ margin: '0', fontSize: '24px', fontWeight: '700' }}>Play Library</h1>
-        <button
-          onClick={() => setIsCreating(true)}
-          style={{
-            padding: '10px 20px',
-            backgroundColor: '#3b82f6',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: '600',
-            minHeight: '44px',
-          }}
-        >
+      <div className={styles.header}>
+        <h1 className={styles.title}>Play Library</h1>
+        <button onClick={() => setIsCreating(true)} className={styles.newPlayBtn}>
           + New Play
         </button>
       </div>
 
       {/* Filter bar */}
-      <div style={{ marginBottom: '24px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+      <div className={styles.filterBar}>
         {['', 'emo', 'man_down', 'settled', 'transition', 'faceoff', 'clear', '6s_set', '6s_fast_break'].map((tag) => (
           <button
             key={tag}
             onClick={() => setFilter(tag)}
-            style={{
-              padding: '6px 12px',
-              backgroundColor: filter === tag ? (SITUATION_COLORS[tag] || '#333') : '#fff',
-              color: filter === tag ? '#fff' : '#000',
-              border: filter === tag ? 'none' : '1px solid #ddd',
-              borderRadius: '20px',
-              cursor: 'pointer',
-              fontSize: '12px',
-              fontWeight: '600',
-              minHeight: '44px',
-            }}
+            className={filter === tag ? styles.filterBtnActive : styles.filterBtnInactive}
+            style={filter === tag ? { backgroundColor: SITUATION_COLORS[tag] || '#333' } : undefined}
           >
             {tag ? SITUATION_LABELS[tag] : 'All'}
           </button>
@@ -171,24 +152,11 @@ export default function PlayLibrary() {
 
       {/* Empty state */}
       {plays.length === 0 && !loading && (
-        <div style={{ textAlign: 'center', padding: '48px 24px' }}>
-          <p style={{ fontSize: '16px', color: '#666', marginBottom: '16px' }}>
+        <div className={styles.emptyState}>
+          <p className={styles.emptyText}>
             No plays yet. Create your first play to get started!
           </p>
-          <button
-            onClick={() => setIsCreating(true)}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: '#3b82f6',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: '600',
-              minHeight: '44px',
-            }}
-          >
+          <button onClick={() => setIsCreating(true)} className={styles.newPlayBtn}>
             Create First Play
           </button>
         </div>
@@ -196,20 +164,14 @@ export default function PlayLibrary() {
 
       {/* Loading state */}
       {loading && (
-        <div style={{ textAlign: 'center', padding: '24px' }}>
+        <div className={styles.loadingState}>
           <p>Loading plays...</p>
         </div>
       )}
 
       {/* Play cards grid */}
       {plays.length > 0 && (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-            gap: '16px',
-          }}
-        >
+        <div className={styles.playGrid}>
           {plays.map((play) => (
             <PlayCard
               key={play.id}

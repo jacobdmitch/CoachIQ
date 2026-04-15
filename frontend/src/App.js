@@ -1,6 +1,7 @@
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ToastProvider } from './context/ToastContext';
 import AppShell from './components/layout/AppShell.js';
 import LoginPage from './components/auth/LoginPage.js';
 
@@ -67,6 +68,7 @@ function PublicRoute({ children }) {
 export default function App() {
   return (
     <AuthProvider>
+      <ToastProvider>
       <Router>
         <Suspense fallback={<PageLoader />}>
           <Routes>
@@ -108,6 +110,7 @@ export default function App() {
           </Routes>
         </Suspense>
       </Router>
+      </ToastProvider>
     </AuthProvider>
   );
 }

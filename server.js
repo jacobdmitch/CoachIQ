@@ -9,7 +9,7 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import { Server as SocketIOServer } from 'socket.io';
 import logger from './services/logger.js';
-import { initializeDatabase } from './services/database.js';
+import { initializeDatabase, query as dbQuery } from './services/database.js';
 import { errorHandler, asyncHandler } from './middleware/errorHandler.js';
 
 // Route imports
@@ -75,9 +75,24 @@ app.use('/api/', limiter);
 const uploadsPath = path.join(__dirname, 'uploads');
 app.use('/uploads', express.static(uploadsPath));
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+// Health check with database connectivity
+app.get('/health', async (req, res) => {
+  try {
+    const dbResult = await dbQuery('SELECT 1 AS ok');
+    res.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      database: dbResult.rows[0]?.ok === 1 ? 'connected' : 'error',
+      uptime: process.uptime(),
+    });
+  } catch (err) {
+    res.status(503).json({
+      status: 'degraded',
+      timestamp: new Date().toISOString(),
+      database: 'disconnected',
+      error: err.message,
+    });
+  }
 });
 
 // API Routes

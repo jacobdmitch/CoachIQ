@@ -9,28 +9,40 @@ import logger from './logger.js';
  */
 export const listPlays = async (coachId, filters = {}) => {
   try {
-    let query = `
-      SELECT p.id, p.team_id, p.title, p.situation_tag, p.diagram_data, p.notes, p.created_at, p.updated_at
-      FROM plays p
-      JOIN teams t ON p.team_id = t.id
-      WHERE t.coach_id = $1
-    `;
+    const limit = Math.min(Math.max(parseInt(filters.limit, 10) || 50, 1), 100);
+    const offset = Math.max(parseInt(filters.offset, 10) || 0, 0);
+
+    let whereClause = `WHERE t.coach_id = $1`;
     const params = [coachId];
 
     if (filters.teamId) {
-      query += ` AND p.team_id = $${params.length + 1}`;
+      whereClause += ` AND p.team_id = $${params.length + 1}`;
       params.push(filters.teamId);
     }
 
     if (filters.situationTag) {
-      query += ` AND p.situation_tag = $${params.length + 1}`;
+      whereClause += ` AND p.situation_tag = $${params.length + 1}`;
       params.push(filters.situationTag);
     }
 
-    query += ` ORDER BY p.created_at DESC`;
+    const countResult = await dbQuery(
+      `SELECT COUNT(*) AS total FROM plays p JOIN teams t ON p.team_id = t.id ${whereClause}`,
+      params
+    );
+    const total = parseInt(countResult.rows[0].total, 10);
 
-    const result = await dbQuery(query, params);
-    return result.rows;
+    const dataParams = [...params, limit, offset];
+    const result = await dbQuery(
+      `SELECT p.id, p.team_id, p.title, p.situation_tag, p.diagram_data, p.notes, p.created_at, p.updated_at
+       FROM plays p
+       JOIN teams t ON p.team_id = t.id
+       ${whereClause}
+       ORDER BY p.created_at DESC
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      dataParams
+    );
+
+    return { rows: result.rows, pagination: { total, limit, offset, hasMore: offset + limit < total } };
   } catch (err) {
     logger.error('Error listing plays:', err);
     throw err;

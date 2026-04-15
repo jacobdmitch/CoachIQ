@@ -1,0 +1,81 @@
+.container {
+  padding: 16px;
+  background-color: #f9f9f9;
+  min-height: 100vh;
+}
+
+.header {
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.newPlayBtn {
+  padding: 10px 20px;
+  background-color: #3b82f6;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  min-height: 44px;
+}
+
+.filterBar {
+  margin-bottom: 24px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filterBtn {
+  padding: 6px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  min-height: 44px;
+}
+
+.filterBtnActive {
+  composes: filterBtn;
+  color: #fff;
+  border: none;
+}
+
+.filterBtnInactive {
+  composes: filterBtn;
+  background-color: #fff;
+  color: #000;
+  border: 1px solid #ddd;
+}
+
+.emptyState {
+  text-align: center;
+  padding: 48px 24px;
+}
+
+.emptyText {
+  font-size: 16px;
+  color: #666;
+  margin-bottom: 16px;
+}
+
+.loadingState {
+  text-align: center;
+  padding: 24px;
+}
+
+.playGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}

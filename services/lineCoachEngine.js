@@ -59,6 +59,7 @@ export async function getLineCoachRecommendation(gameState, playtimeData, option
       toolCalls: [],
       textAnalysis: '',
       suggestions: [],
+      usage: response.usage || null,
     };
 
     // Extract text and tool calls from response
@@ -146,6 +147,7 @@ Be specific and actionable. Consider the athlete's overall skill profile and phy
       format,
       analysis,
       timestamp: Date.now(),
+      usage: response.usage || null,
     };
   } catch (err) {
     logger.error('Error getting position recommendation:', err);

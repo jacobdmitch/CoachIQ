@@ -1,13 +1,23 @@
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import { authenticateToken } from '../middleware/auth.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.js';
 import logger from '../services/logger.js';
 import { query } from '../services/database.js';
 import { getLineCoachRecommendation, getPositionRecommendation } from '../services/lineCoachEngine.js';
 import { getPositionRecommendations } from '../services/positionEngine.js';
-import { logAICall, getCoachAIStats, getCoachCallHistory } from '../services/aiCallLogger.js';
+import { logAICall, getGameAIStats, getGameCallHistory } from '../services/aiCallLogger.js';
 
 const router = express.Router();
+
+// AI-specific rate limit: 30 requests per minute per IP (covers Claude API costs)
+const aiRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: { success: false, error: 'Too many AI requests. Please wait before trying again.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Reference to game state and playtime (shared from game-live.js)
 // In production, use Redis or database for cross-request state
@@ -30,6 +40,7 @@ export function setGameStateReferences(states, trackers) {
 router.post(
   '/recommendations',
   authenticateToken,
+  aiRateLimiter,
   asyncHandler(async (req, res) => {
     const { gameId, focusArea } = req.body;
     const startTime = Date.now();
@@ -97,14 +108,15 @@ router.post(
 
     const latencyMs = Date.now() - startTime;
 
-    // Log API call
+    // Log API call with actual token counts from response
     await logAICall({
       coachId: req.coachId,
       model: 'claude-haiku-4-5-20251001',
-      inputTokens: 500, // Approximate
-      outputTokens: 300, // Approximate
+      inputTokens: recommendation.usage?.input_tokens || 0,
+      outputTokens: recommendation.usage?.output_tokens || 0,
       latencyMs,
       toolName: 'line-coach',
+      gameId,
     });
 
     logger.info(`Line Coach recommendations generated for game ${gameId}`, {
@@ -128,6 +140,7 @@ router.post(
 router.post(
   '/position-fit/:athleteId',
   authenticateToken,
+  aiRateLimiter,
   asyncHandler(async (req, res) => {
     const { athleteId } = req.params;
     const { gameId, format = 'standard' } = req.body;
@@ -158,14 +171,15 @@ router.post(
 
     const latencyMs = Date.now() - startTime;
 
-    // Log API call
+    // Log API call with actual token counts from response
     await logAICall({
       coachId: req.coachId,
       model: 'claude-haiku-4-5-20251001',
-      inputTokens: 400,
-      outputTokens: 250,
+      inputTokens: claudeAnalysis.usage?.input_tokens || 0,
+      outputTokens: claudeAnalysis.usage?.output_tokens || 0,
       latencyMs,
       toolName: 'position-fit',
+      gameId: gameId || null,
     });
 
     logger.info(`Position fit analysis for athlete ${athleteId}`, {
@@ -197,11 +211,11 @@ router.get(
     const { gameId } = req.params;
     const { limit = 50 } = req.query;
 
-    // Get call history (scoped to coach, not game -- table has no game_id column)
-    const callHistory = await getCoachCallHistory(req.coachId, { limit: parseInt(limit) });
+    // Get call history scoped to this game
+    const callHistory = await getGameCallHistory(gameId, { limit: parseInt(limit) });
 
-    // Get call statistics
-    const stats = await getCoachAIStats(req.coachId);
+    // Get call statistics for this game
+    const stats = await getGameAIStats(gameId);
 
     res.json({
       success: true,
@@ -222,7 +236,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
 
-    const stats = await getCoachAIStats(req.coachId);
+    const stats = await getGameAIStats(gameId);
 
     res.json({
       success: true,

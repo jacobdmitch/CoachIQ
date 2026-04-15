@@ -59,15 +59,17 @@ const updatePlaySchema = z.object({
  */
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const { teamId, situationTag } = req.query;
+    const { teamId, situationTag, limit, offset } = req.query;
 
     const filters = {};
     if (teamId) filters.teamId = teamId;
     if (situationTag) filters.situationTag = situationTag;
+    if (limit) filters.limit = limit;
+    if (offset) filters.offset = offset;
 
-    const plays = await playService.listPlays(req.coachId, filters);
+    const result = await playService.listPlays(req.coachId, filters);
 
-    res.json({ success: true, data: plays });
+    res.json({ success: true, data: result.rows, pagination: result.pagination });
   } catch (err) {
     logger.error('GET /api/plays error:', err);
     res.status(500).json({ success: false, error: 'Failed to list plays' });

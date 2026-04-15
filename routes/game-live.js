@@ -5,6 +5,26 @@ import logger from '../services/logger.js';
 import { query } from '../services/database.js';
 import GameStateManager from '../services/gameStateManager.js';
 import PlaytimeTracker from '../services/playtimeTracker.js';
+import { z } from 'zod';
+import { persistGameEvent, persistPlaytimeEntry, saveGameStateSnapshot, loadGameStateSnapshot } from '../services/gamePersistence.js';
+import { broadcastGameUpdate } from './game-sync.js';
+
+const subSchema = z.object({
+  playerIn: z.string().uuid(),
+  playerOut: z.string().uuid(),
+  position: z.string().max(20).optional(),
+});
+
+const eventSchema = z.object({
+  eventType: z.string().min(1).max(30),
+  athleteId: z.string().uuid(),
+  metadata: z.record(z.any()).optional(),
+});
+
+const scoreSchema = z.object({
+  team: z.enum(['home', 'away']),
+  points: z.number().int().min(0),
+});
 
 const router = express.Router();
 
@@ -47,6 +67,9 @@ router.post(
     const playtimeTracker = new PlaytimeTracker(athletes, 15); // 15 min target
     playtimeTrackers.set(gameId, playtimeTracker);
 
+    // Persist initial state snapshot for recovery
+    await saveGameStateSnapshot(gameId, req.coachId, gameState);
+
     logger.info(`Game started: ${gameId}`, { format: game.format });
 
     res.json({
@@ -77,6 +100,7 @@ router.post(
       throw new AppError('Clock is already running', 400);
     }
 
+    broadcastGameUpdate(gameId, 'state_update', { event, state: gameState.getState() });
     logger.info(`Clock started: ${gameId}`);
 
     res.json({
@@ -107,6 +131,7 @@ router.post(
       throw new AppError('Clock is not running', 400);
     }
 
+    broadcastGameUpdate(gameId, 'state_update', { event, state: gameState.getState() });
     logger.info(`Clock stopped: ${gameId}`);
 
     res.json({
@@ -188,15 +213,15 @@ router.post(
   authenticateToken,
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
-    const { playerIn, playerOut, position } = req.body;
+    const parsed = subSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(`Invalid input: ${parsed.error.issues.map(i => i.message).join(', ')}`, 400);
+    }
+    const { playerIn, playerOut, position } = parsed.data;
 
     const gameState = gameStates.get(gameId);
     if (!gameState) {
       throw new AppError('Game not initialized', 400);
-    }
-
-    if (!playerIn || !playerOut) {
-      throw new AppError('playerIn and playerOut required', 400);
     }
 
     // Record sub-out time
@@ -213,6 +238,12 @@ router.post(
       throw new AppError(event.error, 400);
     }
 
+    // Persist sub events and playtime to database
+    persistGameEvent(gameId, { ...event, type: 'PLAYER_SUBBED_IN', athleteId: playerIn });
+    persistGameEvent(gameId, { ...event, type: 'PLAYER_SUBBED_OUT', athleteId: playerOut });
+    saveGameStateSnapshot(gameId, req.coachId, gameState);
+
+    broadcastGameUpdate(gameId, 'substitution', { event, state: gameState.getState() });
     logger.info(`Substitution: ${gameId}, In: ${playerIn}, Out: ${playerOut}`);
 
     res.json({
@@ -233,18 +264,21 @@ router.post(
   authenticateToken,
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
-    const { eventType, athleteId, metadata = {} } = req.body;
+    const parsed = eventSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(`Invalid input: ${parsed.error.issues.map(i => i.message).join(', ')}`, 400);
+    }
+    const { eventType, athleteId, metadata = {} } = parsed.data;
 
     const gameState = gameStates.get(gameId);
     if (!gameState) {
       throw new AppError('Game not initialized', 400);
     }
 
-    if (!eventType || !athleteId) {
-      throw new AppError('eventType and athleteId required', 400);
-    }
-
     const event = gameState.logEvent(eventType, athleteId, metadata);
+
+    // Persist to database
+    persistGameEvent(gameId, event);
 
     logger.debug(`Event logged: ${gameId}, ${eventType}, Player ${athleteId}`);
 
@@ -266,15 +300,15 @@ router.post(
   authenticateToken,
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
-    const { team, points } = req.body;
+    const parsed = scoreSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(`Invalid input: ${parsed.error.issues.map(i => i.message).join(', ')}`, 400);
+    }
+    const { team, points } = parsed.data;
 
     const gameState = gameStates.get(gameId);
     if (!gameState) {
       throw new AppError('Game not initialized', 400);
-    }
-
-    if (!team || points === undefined) {
-      throw new AppError('team and points required', 400);
     }
 
     const event = gameState.updateScore(team, points);
@@ -282,6 +316,13 @@ router.post(
       throw new AppError(event.error, 400);
     }
 
+    // Persist score to games table immediately
+    await query(
+      `UPDATE games SET score_home = $1, score_away = $2 WHERE id = $3`,
+      [gameState.homeScore, gameState.awayScore, gameId]
+    );
+
+    broadcastGameUpdate(gameId, 'score_update', { event, state: gameState.getState() });
     logger.info(`Score updated: ${gameId}, ${team} = ${points}`);
 
     res.json({
@@ -365,6 +406,13 @@ router.post(
         status = 'completed'
       WHERE id = $3`,
       [gameState.homeScore, gameState.awayScore, gameId]
+    );
+
+    // Mark game session as ended
+    await query(
+      `UPDATE game_sessions SET status = 'ended', game_state = $1, updated_at = NOW()
+       WHERE game_id = $2 AND status = 'active'`,
+      [JSON.stringify(gameState.getState()), gameId]
     );
 
     // Clean up memory

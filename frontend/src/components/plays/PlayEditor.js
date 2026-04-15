@@ -1,4 +1,5 @@
 import React, { useReducer, useRef, useState } from 'react';
+import { useToast } from '../../context/ToastContext.js';
 import FieldSVG from './FieldSVG.js';
 
 const initialDiagramState = {
@@ -192,6 +193,7 @@ function diagramReducer(state, action) {
  * Manages SVG canvas, toolbar, and save panel
  */
 export default function PlayEditor({ play, teamId, onSave, onCancel }) {
+  const toast = useToast();
   const [diagram, dispatch] = useReducer(diagramReducer, initialDiagramState, (initial) => {
     if (play && play.diagram_data) {
       return {
@@ -316,13 +318,13 @@ export default function PlayEditor({ play, teamId, onSave, onCancel }) {
       img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
     } catch (err) {
       console.error('Export failed:', err);
-      alert('Failed to export PNG');
+      toast.error('Failed to export PNG');
     }
   };
 
   const handleSave = async () => {
     if (!title.trim()) {
-      alert('Please enter a play title');
+      toast.warning('Please enter a play title');
       return;
     }
 

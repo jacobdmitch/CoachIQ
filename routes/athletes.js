@@ -25,6 +25,15 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
 
   await requireTeamAccess(req.coachId, teamId);
 
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+  const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+
+  const countResult = await query(
+    'SELECT COUNT(*) AS total FROM athletes WHERE team_id = $1',
+    [teamId]
+  );
+  const total = parseInt(countResult.rows[0].total, 10);
+
   const result = await query(
     `SELECT
        a.id, a.jersey_number, a.first_name, a.last_name,
@@ -42,11 +51,12 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
      FROM athletes a
      LEFT JOIN athlete_season_stats aps ON a.id = aps.athlete_id
      WHERE a.team_id = $1
-     ORDER BY a.primary_position, a.last_name`,
-    [teamId]
+     ORDER BY a.primary_position, a.last_name
+     LIMIT $2 OFFSET $3`,
+    [teamId, limit, offset]
   );
 
-  res.json({ success: true, athletes: result.rows });
+  res.json({ success: true, athletes: result.rows, pagination: { total, limit, offset, hasMore: offset + limit < total } });
 }));
 
 // ─── GET /:id — single athlete ────────────────────────────────────────────────
