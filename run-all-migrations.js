@@ -2,8 +2,12 @@ import 'dotenv/config';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import pool from './services/database.js';
+import pg from 'pg';
 import logger from './services/logger.js';
+
+const { Pool } = pg;
+const sslConfig = process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false;
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: sslConfig });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
