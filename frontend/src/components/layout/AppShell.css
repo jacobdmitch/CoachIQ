@@ -123,6 +123,18 @@
   .page-title { font-size: var(--text-xl); }
 }
 
+/* ─── Live game banner pulse animation ─────────────────────── */
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(1.3); }
+}
+
+/* When the banner is showing, push content down by the banner height (~44px) */
+.app-shell:has(.live-game-banner) .app-content {
+  padding-top: calc(var(--nav-height) + 44px);
+}
+
 /* ─── Play editor: breaks out of the page-content max-width ── */
 /* PlayEditor renders directly in app-content; it manages its own layout */
 .play-editor-page {

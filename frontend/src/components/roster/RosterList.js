@@ -12,6 +12,7 @@ const FILTERS     = ['All', ...POSITIONS];
 const EMPTY_FORM = {
   firstName: '', lastName: '', jerseyNumber: '',
   primaryPosition: '', graduationYear: '',
+  email: '', sendGameSummary: false,
 };
 
 /* ─── Athlete form modal ────────────────────────────────────────────────────── */
@@ -26,6 +27,8 @@ function AthleteModal({ initial, onSave, onClose, saving }) {
           jerseyNumber:    initial.jersey_number     ?? '',
           primaryPosition: initial.primary_position  || '',
           graduationYear:  initial.graduation_year   ?? '',
+          email:           initial.email             || '',
+          sendGameSummary: initial.send_game_summary || false,
         }
       : { ...EMPTY_FORM }
   );
@@ -41,6 +44,8 @@ function AthleteModal({ initial, onSave, onClose, saving }) {
       jerseyNumber:    form.jerseyNumber !== '' ? parseInt(form.jerseyNumber, 10) : null,
       primaryPosition: form.primaryPosition || null,
       graduationYear:  form.graduationYear !== '' ? parseInt(form.graduationYear, 10) : null,
+      email:           form.email.trim() || null,
+      sendGameSummary: form.sendGameSummary,
     });
   }
 
@@ -116,6 +121,29 @@ function AthleteModal({ initial, onSave, onClose, saving }) {
               <input style={inputStyle} type="number" min="2024" max="2035" value={form.graduationYear} onChange={e => set('graduationYear', e.target.value)} placeholder="2026" />
             </div>
           </div>
+
+          <div style={{ marginBottom: 'var(--sp-5)' }}>
+            <label style={labelStyle}>Email (optional)</label>
+            <input
+              style={inputStyle}
+              type="email"
+              value={form.email}
+              onChange={e => set('email', e.target.value)}
+              placeholder="player@example.com"
+            />
+          </div>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', marginBottom: 'var(--sp-6)', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={form.sendGameSummary}
+              onChange={e => set('sendGameSummary', e.target.checked)}
+              style={{ width: 18, height: 18, accentColor: 'var(--color-gold)', cursor: 'pointer', flexShrink: 0 }}
+            />
+            <span style={{ fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
+              Send post-game stat summary to this email
+            </span>
+          </label>
 
           <div style={{ display: 'flex', gap: 'var(--sp-3)', justifyContent: 'flex-end' }}>
             <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>
@@ -279,7 +307,7 @@ export default function RosterList() {
             </span>
 
             {[p.games_played, p.goals, p.assists].map((val, idx) => (
-              <span key={idx} style={{ fontFamily: 'var(--font-stats)', fontSize: 'var(--text-base)', color: 'var(--color-text-secondary)' }}>
+              <span key={idx} style={{ fontFamily: 'var(--font-stats)', fontSize: 'var(--text-lg)', color: 'var(--color-text-secondary)', lineHeight: 1 }}>
                 {val ?? '—'}
               </span>
             ))}

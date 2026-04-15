@@ -594,6 +594,7 @@ function FaceoffTracker({ gameId, athletes, period }) {
 export default function GameMode() {
   const { gameId } = useParams();
   const { team }   = useAuth();
+  const toast      = useToast();
   const token      = localStorage.getItem('token');
 
   const { game, loading, updateScore, updateStatus, refresh: refreshGame } = useGame(gameId);
@@ -606,12 +607,14 @@ export default function GameMode() {
   const { lines }   = useLines(team?.id);
   const { athletes } = useRoster(team?.id);
 
-  const [homeScore,    setHomeScore]    = useState(0);
-  const [awayScore,    setAwayScore]    = useState(0);
-  const [period,       setPeriod]       = useState(1);
-  const [clockRunning, setClockRunning] = useState(false);
-  const [showStats,    setShowStats]    = useState(false);
-  const [aiOpen,       setAiOpen]       = useState(false);
+  const [homeScore,      setHomeScore]      = useState(0);
+  const [awayScore,      setAwayScore]      = useState(0);
+  const [period,         setPeriod]         = useState(1);
+  const [clockRunning,   setClockRunning]   = useState(false);
+  const [showStats,      setShowStats]      = useState(false);
+  const [aiOpen,         setAiOpen]         = useState(false);
+  const [undoing,        setUndoing]        = useState(false);
+  const [playtimeAlerts, setPlaytimeAlerts] = useState([]);
 
   useEffect(() => {
     if (game) {
@@ -628,6 +631,27 @@ export default function GameMode() {
       setClockRunning(liveState.clockRunning ?? false);
     }
   }, [liveState]);
+
+  // Poll playtime equity every 60s and surface HIGH-urgency flags
+  useEffect(() => {
+    if (!gameId) return;
+    let cancelled = false;
+
+    async function fetchPlaytime() {
+      try {
+        const res = await apiClient.get(`/game-live/${gameId}/playtime`);
+        if (cancelled) return;
+        const highFlags = (res.data.equityFlags || []).filter(f => f.urgency === 'HIGH');
+        setPlaytimeAlerts(highFlags);
+      } catch {
+        // Silently ignore — don't interrupt the game for a failed playtime poll
+      }
+    }
+
+    fetchPlaytime();
+    const interval = setInterval(fetchPlaytime, 60000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [gameId]);
 
   if (!gameId) return <GamePicker teamId={team?.id} />;
   if (loading)  return (
@@ -666,6 +690,23 @@ export default function GameMode() {
     }
   }
 
+  async function undoLastEvent() {
+    if (!gameId || undoing) return;
+    setUndoing(true);
+    try {
+      const res = await apiClient.delete(`/game-live/${gameId}/event/last`);
+      if (res.data.removed) {
+        toast.success('Last stat event undone');
+      } else {
+        toast.info('Nothing to undo');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Undo failed');
+    } finally {
+      setUndoing(false);
+    }
+  }
+
   function toggleClock() {
     if (clockRunning) { stopClock(); setClockRunning(false); }
     else              { startClock(); setClockRunning(true); }
@@ -681,7 +722,7 @@ export default function GameMode() {
           <p className="page-subtitle">vs {game?.opponent ?? '—'}</p>
         </div>
         <div style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'center', flexWrap: 'wrap' }}>
-          {connected && <Badge variant="green" dot>Live</Badge>}
+          <Badge variant={connected ? 'green' : 'red'} dot>{connected ? 'Live' : 'Offline'}</Badge>
           <Badge variant={leading === 'home' ? 'green' : leading === 'away' ? 'red' : 'amber'} dot>
             {leading === 'tied' ? 'Tied' : leading === 'home' ? 'Leading' : 'Trailing'}
           </Badge>
@@ -802,11 +843,49 @@ export default function GameMode() {
         </div>
       )}
 
+      {/* ── Playtime Alerts ──────────────────────────────── */}
+      {playtimeAlerts.length > 0 && (
+        <div style={{ marginBottom: 'var(--sp-6)' }}>
+          {playtimeAlerts.filter(f => f.status === 'UNDER_TARGET').map(flag => {
+            const a = athletes?.find(p => String(p.id) === String(flag.athleteId));
+            const name = a ? `#${a.jersey_number ?? ''} ${a.first_name} ${a.last_name}`.trim() : `Player ${flag.athleteId}`;
+            return (
+              <div
+                key={flag.athleteId}
+                style={{
+                  background: 'var(--color-amber-muted, rgba(180,100,0,0.15))',
+                  border: '1px solid var(--color-amber-border, rgba(180,100,0,0.3))',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '10px 14px',
+                  marginBottom: 'var(--sp-2)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  gap: 'var(--sp-3)',
+                }}
+              >
+                <span style={{
+                  fontFamily: 'var(--font-body)', fontWeight: 600, fontSize: 'var(--text-sm)',
+                  color: 'var(--color-gold)',
+                }}>
+                  {name} needs {flag.minutesUnder}m — {flag.totalMinutes}/{flag.targetMinutes} min played
+                </span>
+                <span style={{
+                  fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)',
+                  letterSpacing: '1px', textTransform: 'uppercase',
+                  color: 'var(--color-gold)', opacity: 0.7,
+                }}>
+                  Sub in
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* ── Quick Actions ────────────────────────────────── */}
       <p className="section-heading">Quick Actions</p>
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
+        gridTemplateColumns: is6s ? 'repeat(3, 1fr)' : 'repeat(4, 1fr)',
         gap: 'var(--sp-3)',
         marginBottom: 'var(--sp-6)',
       }}>
@@ -828,6 +907,15 @@ export default function GameMode() {
             Faceoff
           </Button>
         )}
+
+        <Button
+          variant="ghost"
+          style={{ width: '100%', justifyContent: 'center', minHeight: 52, opacity: undoing ? 0.5 : 1 }}
+          onClick={undoLastEvent}
+          disabled={undoing}
+        >
+          {undoing ? 'Undoing…' : 'Undo Stat'}
+        </Button>
 
         <Button
           variant="primary"

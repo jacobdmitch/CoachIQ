@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useDashboard } from '../../hooks/useDashboard';
 import { useGames } from '../../hooks/useGame';
@@ -108,6 +108,7 @@ function formatDate(dateStr) {
 
 export default function SeasonDashboard() {
   const { team, coach } = useAuth();
+  const navigate = useNavigate();
   const { data, loading, error, refresh } = useDashboard(team?.id);
   const [showSchedule, setShowSchedule] = useState(false);
 
@@ -141,7 +142,7 @@ export default function SeasonDashboard() {
           <p style={{ color: 'var(--color-text-muted)', marginBottom: 'var(--sp-4)' }}>
             No team configured yet. Create your first team to get started.
           </p>
-          <Button variant="primary">Create Team</Button>
+          <Button variant="primary" onClick={() => navigate('/settings')}>Create Team</Button>
         </div>
       </div>
     );
@@ -279,9 +280,15 @@ export default function SeasonDashboard() {
                 <span style={{ flex: 1, fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)' }}>
                   {p.first_name} {p.last_name}
                 </span>
-                <span style={{ fontFamily: 'var(--font-stats)', fontSize: 'var(--text-base)', color: 'var(--color-text-secondary)' }}>
-                  {p.goals}G {p.assists}A
-                </span>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontFamily: 'var(--font-stats)', fontSize: 'var(--text-lg)', color: 'var(--color-text-primary)', letterSpacing: 1 }}>
+                    {p.goals}
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginLeft: 1 }}>G</span>
+                    {' '}
+                    {p.assists}
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginLeft: 1 }}>A</span>
+                  </span>
+                </div>
               </Link>
             ))}
           </div>

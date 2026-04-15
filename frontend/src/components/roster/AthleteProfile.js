@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAthlete } from '../../hooks/useRoster';
+import { useRoster } from '../../hooks/useRoster';
+import { useAuth } from '../../context/AuthContext';
 import StatCard from '../common/StatCard';
 import Badge from '../common/Badge';
 import Button from '../common/Button';
@@ -34,6 +36,29 @@ function SkillBar({ label, value }) {
 export default function AthleteProfile() {
   const { athleteId } = useParams();
   const { athlete, loading, error } = useAthlete(athleteId);
+  const { team } = useAuth();
+  const { updateAthlete } = useRoster(team?.id);
+
+  const [editing,     setEditing]     = useState(false);
+  const [editEmail,   setEditEmail]   = useState('');
+  const [editSummary, setEditSummary] = useState(false);
+  const [saving,      setSaving]      = useState(false);
+
+  function openEdit() {
+    setEditEmail(athlete?.email || '');
+    setEditSummary(athlete?.send_game_summary || false);
+    setEditing(true);
+  }
+
+  async function saveEdit() {
+    setSaving(true);
+    try {
+      await updateAthlete(athleteId, { email: editEmail.trim() || null, sendGameSummary: editSummary });
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -93,8 +118,26 @@ export default function AthleteProfile() {
             </p>
           </div>
         </div>
-        <Button variant="ghost" size="sm">Edit Profile</Button>
+        <Button variant="ghost" size="sm" onClick={openEdit}>Edit Profile</Button>
       </div>
+
+      {/* Contact / notifications — only shown when data exists */}
+      {(athlete.email || athlete.send_game_summary) && (
+        <>
+          <p className="section-heading">Contact</p>
+          <div className="card" style={{ marginBottom: 'var(--sp-8)', display: 'flex', alignItems: 'center', gap: 'var(--sp-6)', flexWrap: 'wrap' }}>
+            {athlete.email && (
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
+                <span style={{ fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', fontSize: 'var(--text-xs)', letterSpacing: '1px', marginRight: 8 }}>Email</span>
+                {athlete.email}
+              </span>
+            )}
+            {athlete.send_game_summary && (
+              <Badge variant="gold">Post-game summaries on</Badge>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Season stats */}
       <p className="section-heading">Season Stats</p>
@@ -117,16 +160,16 @@ export default function AthleteProfile() {
           <p className="section-heading">Skill Ratings</p>
           <div className="grid-2" style={{ marginBottom: 'var(--sp-8)' }}>
             <div className="card">
-              <SkillBar label="Shooting"       value={athlete.skill_shooting} />
-              <SkillBar label="Passing"        value={athlete.skill_passing} />
-              <SkillBar label="Dodging"        value={athlete.skill_dodging} />
+              <SkillBar label="Shooting"        value={athlete.skill_shooting} />
+              <SkillBar label="Passing"         value={athlete.skill_passing} />
+              <SkillBar label="Dodging"         value={athlete.skill_dodging} />
               <SkillBar label="Field Awareness" value={athlete.skill_field_awareness} />
             </div>
             <div className="card">
-              <SkillBar label="Defense"        value={athlete.skill_defense} />
-              <SkillBar label="Ground Balls"   value={athlete.skill_ground_balls} />
-              <SkillBar label="Faceoff"        value={athlete.skill_faceoff} />
-              <SkillBar label="Transition"     value={athlete.skill_transition} />
+              <SkillBar label="Defense"      value={athlete.skill_defense} />
+              <SkillBar label="Ground Balls" value={athlete.skill_ground_balls} />
+              <SkillBar label="Faceoff"      value={athlete.skill_faceoff} />
+              <SkillBar label="Transition"   value={athlete.skill_transition} />
             </div>
           </div>
         </>
@@ -142,6 +185,78 @@ export default function AthleteProfile() {
             </p>
           </div>
         </>
+      )}
+
+      {/* Edit modal */}
+      {editing && (
+        <div
+          onClick={() => setEditing(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, padding: 'var(--sp-4)',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'var(--color-surface-1)', borderRadius: 'var(--radius-lg)',
+              border: '1px solid var(--color-border)', padding: 'var(--sp-6)',
+              width: '100%', maxWidth: 420,
+            }}
+          >
+            <p style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)', letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 'var(--sp-5)' }}>
+              Edit Profile — {athlete.first_name} {athlete.last_name}
+            </p>
+
+            {/* Email */}
+            <label style={{ display: 'block', marginBottom: 'var(--sp-4)' }}>
+              <span style={{ display: 'block', fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 'var(--sp-2)' }}>
+                Email (optional)
+              </span>
+              <input
+                type="email"
+                value={editEmail}
+                onChange={e => setEditEmail(e.target.value)}
+                placeholder="player@example.com"
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-sm)', padding: '10px 12px',
+                  fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)',
+                  outline: 'none',
+                }}
+              />
+            </label>
+
+            {/* Post-game summary toggle */}
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--sp-3)', cursor: 'pointer', marginBottom: 'var(--sp-6)' }}>
+              <input
+                type="checkbox"
+                checked={editSummary}
+                onChange={e => setEditSummary(e.target.checked)}
+                style={{ marginTop: 2, accentColor: 'var(--color-gold)', width: 16, height: 16, flexShrink: 0 }}
+              />
+              <span>
+                <span style={{ display: 'block', fontFamily: 'var(--font-body)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)' }}>
+                  Send post-game summary
+                </span>
+                <span style={{ fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                  Email this player their stats after each game
+                </span>
+              </span>
+            </label>
+
+            <div style={{ display: 'flex', gap: 'var(--sp-3)', justifyContent: 'flex-end' }}>
+              <Button variant="ghost" size="sm" onClick={() => setEditing(false)} disabled={saving}>
+                Cancel
+              </Button>
+              <Button variant="primary" size="sm" onClick={saveEdit} disabled={saving}>
+                {saving ? 'Saving…' : 'Save'}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

@@ -23,14 +23,24 @@ function diagramReducer(state, action) {
       const newState = { ...state, players: [...state.players, action.payload] };
       return { ...newState, history: [...state.history, newState], redoStack: [] };
     }
+    case 'DRAG_PLAYER': {
+      // Live drag — updates position without writing to history to avoid stack flooding
+      return {
+        ...state,
+        players: state.players.map(p =>
+          p.id === action.payload.id ? { ...p, x: action.payload.x, y: action.payload.y } : p
+        ),
+      };
+    }
     case 'MOVE_PLAYER': {
+      // Committed move (on pointer-up) — saves pre-move state to history for undo
       const newState = {
         ...state,
         players: state.players.map(p =>
           p.id === action.payload.id ? { ...p, x: action.payload.x, y: action.payload.y } : p
         ),
       };
-      return { ...newState, history: [...state.history, newState], redoStack: [] };
+      return { ...newState, history: [...state.history, state], redoStack: [] };
     }
     case 'REMOVE_PLAYER': {
       const newState = { ...state, players: state.players.filter(p => p.id !== action.payload) };
@@ -153,7 +163,8 @@ export default function PlayEditor({ play, teamId, onSave, onCancel }) {
   const [notes,        setNotes]        = useState(play?.notes         || '');
   const [hoveredPlayer, setHoveredPlayer] = useState(null);
 
-  const canvasRef = useRef(null); // attached to the container div (same size as SVG)
+  const canvasRef    = useRef(null); // attached to the container div (same size as SVG)
+  const draggingRef  = useRef(null); // { playerId, lastX, lastY } during an active drag
 
   // ─── Coordinate helpers ─────────────────────────────────
 
@@ -194,16 +205,27 @@ export default function PlayEditor({ play, teamId, onSave, onCancel }) {
 
   function handleCanvasPointerMove(e) {
     if (diagram.selectedTool === 'arrow' && diagram.drawingArrow) {
-      // Arrow preview: add points as the pointer drags
-      // Throttle by only recording every ~8px of movement (optional)
       const { x, y } = toFraction(e.clientX, e.clientY);
       dispatch({ type: 'ADD_ARROW_POINT', payload: [x, y] });
+    } else if (draggingRef.current) {
+      const { x, y } = toFraction(e.clientX, e.clientY);
+      draggingRef.current.lastX = x;
+      draggingRef.current.lastY = y;
+      dispatch({ type: 'DRAG_PLAYER', payload: { id: draggingRef.current.playerId, x, y } });
     }
   }
 
   function handleCanvasPointerUp() {
     if (diagram.selectedTool === 'arrow' && diagram.drawingArrow) {
       dispatch({ type: 'FINISH_ARROW' });
+    }
+    if (draggingRef.current) {
+      // Commit final position to history so undo works cleanly
+      dispatch({
+        type: 'MOVE_PLAYER',
+        payload: { id: draggingRef.current.playerId, x: draggingRef.current.lastX, y: draggingRef.current.lastY },
+      });
+      draggingRef.current = null;
     }
   }
 
@@ -213,6 +235,11 @@ export default function PlayEditor({ play, teamId, onSave, onCancel }) {
       dispatch({ type: 'START_ARROW', payload: playerId });
     } else if (diagram.selectedTool === 'delete') {
       dispatch({ type: 'REMOVE_PLAYER', payload: playerId });
+    } else if (diagram.selectedTool === 'select') {
+      // Begin drag — capture pointer on the canvas so moves aren't lost at speed
+      const player = diagram.players.find(p => p.id === playerId);
+      draggingRef.current = { playerId, lastX: player?.x ?? 0.5, lastY: player?.y ?? 0.5 };
+      canvasRef.current?.setPointerCapture?.(e.pointerId);
     }
   }
 
@@ -385,6 +412,8 @@ export default function PlayEditor({ play, teamId, onSave, onCancel }) {
             onPointerMove={handleCanvasPointerMove}
             onPointerUp={handleCanvasPointerUp}
             onPointerLeave={handleCanvasPointerUp}
+            onPointerCancel={() => { draggingRef.current = null; }}
+            style={{ touchAction: 'none' }}
           >
             <FieldSVG format={diagram.format} width={SVG_W} height={SVG_H}>
 

@@ -633,6 +633,30 @@ export class GameStateManager {
     };
   }
 
+  // ─── Undo ─────────────────────────────────────────────────────────────────────
+
+  /**
+   * Remove the most recent loggable stat event from the in-memory log.
+   * Returns the removed event (so the caller can delete it from the DB),
+   * or null if there's nothing to undo.
+   *
+   * Only undoes events that correspond to DB rows (not clock/score/sub events).
+   */
+  undoLastStatEvent() {
+    const UNDOABLE = new Set([
+      'GOAL', 'ASSIST', 'SHOT', 'SHOT_ON_GOAL',
+      'GROUND_BALL', 'TURNOVER', 'CAUSED_TURNOVER',
+      'SAVE', 'PENALTY', 'FACEOFF_WIN', 'FACEOFF_LOSS',
+    ]);
+    for (let i = this.events.length - 1; i >= 0; i--) {
+      if (UNDOABLE.has(this.events[i].type)) {
+        const [removed] = this.events.splice(i, 1);
+        return removed;
+      }
+    }
+    return null;
+  }
+
   // ─── Private helpers ──────────────────────────────────────────────────────────
 
   _athleteName(athleteId) {

@@ -3,6 +3,7 @@ import { authenticateToken } from '../middleware/auth.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.js';
 import { query } from '../services/database.js';
 import logger from '../services/logger.js';
+import { sendPostGameSummaries } from '../services/emailService.js';
 
 const router = express.Router();
 
@@ -126,7 +127,45 @@ router.patch('/:id', authenticateToken, asyncHandler(async (req, res) => {
     values
   );
 
-  res.json({ success: true, game: updated.rows[0] });
+  const updatedGame = updated.rows[0];
+
+  // Fire post-game summary emails when a game is marked completed
+  if (req.body.status === 'completed' && game.status !== 'completed') {
+    try {
+      const [athleteStats, teamRow] = await Promise.all([
+        query(
+          `SELECT
+             a.id AS athlete_id, a.first_name, a.last_name, a.email, a.send_game_summary,
+             COUNT(CASE WHEN ge.event_type = 'goal'            THEN 1 END) AS goals,
+             COUNT(CASE WHEN ge.event_type = 'assist'          THEN 1 END) AS assists,
+             COUNT(CASE WHEN ge.event_type = 'shot'            THEN 1 END) AS shots,
+             COUNT(CASE WHEN ge.event_type = 'ground_ball'     THEN 1 END) AS ground_balls,
+             COUNT(CASE WHEN ge.event_type = 'turnover'        THEN 1 END) AS turnovers,
+             COUNT(CASE WHEN ge.event_type = 'save'            THEN 1 END) AS saves,
+             COUNT(CASE WHEN ge.event_type = 'faceoff_win'     THEN 1 END) AS faceoff_wins,
+             COUNT(CASE WHEN ge.event_type = 'faceoff_loss'    THEN 1 END) AS faceoff_losses,
+             COALESCE(SUM(pl.minutes_played), 0)                            AS minutes_played
+           FROM athletes a
+           LEFT JOIN game_events ge ON a.id = ge.athlete_id AND ge.game_id = $1
+           LEFT JOIN playtime_log pl ON a.id = pl.athlete_id AND pl.game_id = $1
+           WHERE a.team_id = $2 AND a.send_game_summary = true AND a.email IS NOT NULL
+           GROUP BY a.id, a.first_name, a.last_name, a.email, a.send_game_summary`,
+          [req.params.id, updatedGame.team_id]
+        ),
+        query('SELECT name FROM teams WHERE id = $1', [updatedGame.team_id]),
+      ]);
+
+      const teamName = teamRow.rows[0]?.name || 'Your Team';
+      // Fire-and-forget — don't block the HTTP response on email delivery
+      sendPostGameSummaries(updatedGame, athleteStats.rows, teamName).catch(err =>
+        logger.error(`Post-game email error: ${err.message}`)
+      );
+    } catch (err) {
+      logger.error(`Failed to fetch data for post-game emails: ${err.message}`);
+    }
+  }
+
+  res.json({ success: true, game: updatedGame });
 }));
 
 // ─── GET /:gameId/situation-assignments ──────────────────────────────────────

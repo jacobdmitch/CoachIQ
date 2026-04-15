@@ -89,6 +89,7 @@ router.post('/', authenticateToken, asyncHandler(async (req, res) => {
   const {
     teamId, firstName, lastName, jerseyNumber,
     primaryPosition, secondaryPosition, graduationYear, notes,
+    email, sendGameSummary,
     skillGroundBalls, skillDodging, skillShooting, skillPassing,
     skillDefense, skillFaceoff, skillTransition, skillFieldAwareness,
   } = req.body;
@@ -103,14 +104,16 @@ router.post('/', authenticateToken, asyncHandler(async (req, res) => {
     `INSERT INTO athletes (
        team_id, first_name, last_name, jersey_number,
        primary_position, secondary_position, graduation_year, notes,
+       email, send_game_summary,
        skill_ground_balls, skill_dodging, skill_shooting, skill_passing,
        skill_defense, skill_faceoff, skill_transition, skill_field_awareness
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
      RETURNING *`,
     [
       teamId, firstName, lastName, jerseyNumber || null,
       primaryPosition || null, secondaryPosition || null,
       graduationYear || null, notes || null,
+      email || null, sendGameSummary ? true : false,
       skillGroundBalls || null, skillDodging || null,
       skillShooting || null, skillPassing || null,
       skillDefense || null, skillFaceoff || null,
@@ -138,6 +141,7 @@ router.patch('/:id', authenticateToken, asyncHandler(async (req, res) => {
   const allowed = [
     'first_name', 'last_name', 'jersey_number', 'primary_position',
     'secondary_position', 'graduation_year', 'status', 'notes',
+    'email', 'send_game_summary',
     'skill_ground_balls', 'skill_dodging', 'skill_shooting', 'skill_passing',
     'skill_defense', 'skill_faceoff', 'skill_transition', 'skill_field_awareness',
   ];
@@ -146,7 +150,8 @@ router.patch('/:id', authenticateToken, asyncHandler(async (req, res) => {
   const keyMap = {
     firstName: 'first_name', lastName: 'last_name', jerseyNumber: 'jersey_number',
     primaryPosition: 'primary_position', secondaryPosition: 'secondary_position',
-    graduationYear: 'graduation_year', skillGroundBalls: 'skill_ground_balls',
+    graduationYear: 'graduation_year', sendGameSummary: 'send_game_summary',
+    skillGroundBalls: 'skill_ground_balls',
     skillDodging: 'skill_dodging', skillShooting: 'skill_shooting',
     skillPassing: 'skill_passing', skillDefense: 'skill_defense',
     skillFaceoff: 'skill_faceoff', skillTransition: 'skill_transition',

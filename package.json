@@ -26,6 +26,7 @@
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^6.9.14",
     "node-cron": "^3.0.3",
     "pg": "^8.13.3",
     "socket.io": "^4.8.1",

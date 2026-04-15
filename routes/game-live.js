@@ -342,6 +342,53 @@ router.post(
 );
 
 /**
+ * DELETE /:gameId/event/last
+ * Undo the most recent stat event (goal, assist, shot, etc.) for this game.
+ * Removes it from in-memory state and deletes it from the database.
+ */
+router.delete(
+  '/:gameId/event/last',
+  authenticateToken,
+  asyncHandler(async (req, res) => {
+    const { gameId } = req.params;
+
+    const gameState = gameStates.get(gameId);
+    if (!gameState) throw new AppError('Game not initialized', 400);
+
+    const removed = gameState.undoLastStatEvent();
+    if (!removed) {
+      return res.json({ success: true, removed: null, message: 'Nothing to undo.' });
+    }
+
+    // Map the in-memory event type to the DB event_type string
+    const TYPE_MAP = {
+      GOAL: 'goal', ASSIST: 'assist', SHOT: 'shot', SHOT_ON_GOAL: 'shot_on_goal',
+      GROUND_BALL: 'ground_ball', TURNOVER: 'turnover', CAUSED_TURNOVER: 'caused_turnover',
+      SAVE: 'save', PENALTY: 'penalty', FACEOFF_WIN: 'faceoff_win', FACEOFF_LOSS: 'faceoff_loss',
+    };
+    const dbType = TYPE_MAP[removed.type];
+
+    if (dbType && removed.athleteId) {
+      // Delete the most recently inserted matching row
+      await query(
+        `DELETE FROM game_events WHERE id = (
+           SELECT id FROM game_events
+           WHERE game_id = $1 AND athlete_id = $2 AND event_type = $3
+           ORDER BY created_at DESC
+           LIMIT 1
+         )`,
+        [gameId, removed.athleteId, dbType]
+      );
+    }
+
+    logger.info(`Undo last event: ${removed.type} for athlete ${removed.athleteId} in game ${gameId}`);
+    broadcastGameUpdate(gameId, 'state_update', { state: gameState.getState() });
+
+    res.json({ success: true, removed, state: gameState.getState() });
+  })
+);
+
+/**
  * POST /:gameId/score
  * Update team score
  * Body: { team, points }
