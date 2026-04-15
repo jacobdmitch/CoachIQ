@@ -99,7 +99,7 @@ setupGameSync(io);
 if (process.env.NODE_ENV === 'production') {
   const frontendPath = path.join(__dirname, 'frontend/build');
   app.use(express.static(frontendPath));
-  app.get('*', (req, res) => {
+  app.get('/{*path}', (req, res) => {
     res.sendFile(path.join(frontendPath, 'index.html'));
   });
 }
