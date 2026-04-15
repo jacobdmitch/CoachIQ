@@ -1,0 +1,11 @@
+import pg from 'pg';
+import logger from './logger.js';
+const {Pool}=pg;
+let pool;
+export const initializeDatabase=async()=>{const sslConfig=process.env.NODE_ENV==='production'?{rejectUnauthorized:false}:false;pool=new Pool({connectionString:process.env.DATABASE_URL,ssl:sslConfig,max:20,idleTimeoutMillis:30000,connectionTimeoutMillis:2000});try{const client=await pool.connect();const result=await client.query('SELECT NOW()');logger.info('Database connection successful:',result.rows[0]);client.release();}catch(err){logger.error('Database connection failed:',err);throw err;}};
+export const query=(text,params=[])=>pool.query(text,params);
+export const readQuery=(text,params=[])=>pool.query(text,params);
+export const getClient=async()=>pool.connect();
+export const transaction=async(callback)=>{const client=await getClient();try{await client.query('BEGIN');const result=await callback(client);await client.query('COMMIT');return result;}catch(err){await client.query('ROLLBACK');throw err;}finally{client.release();}};
+export const closeConnection=async()=>{if(pool)await pool.end();logger.info('Database connections closed');};
+export default pool;

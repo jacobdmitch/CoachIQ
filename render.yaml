@@ -1,0 +1,96 @@
+services:
+  # ============================================================================
+  # WEB SERVER
+  # ============================================================================
+  - type: web
+    name: coachiq
+    runtime: node
+    region: oregon
+    plan: starter
+    buildCommand: npm install && npm run build && npm run migrate
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3001"
+
+      # ── Auth ────────────────────────────────────────────────────────────────
+      # Generate both with: openssl rand -hex 64
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+
+      # ── AI ──────────────────────────────────────────────────────────────────
+      - key: ANTHROPIC_API_KEY
+        sync: false
+
+      # ── URLs ────────────────────────────────────────────────────────────────
+      # Update after first deploy with actual Render URL or custom domain
+      - key: CORS_ORIGIN
+        value: https://coachiq.onrender.com
+      - key: APP_BASE_URL
+        value: https://coachiq.onrender.com
+
+      # ── Database ────────────────────────────────────────────────────────────
+      - key: DATABASE_URL
+        fromDatabase:
+          name: coachiq-db
+          property: connectionString
+
+      # ── Stripe (set in dashboard when billing is wired up) ──────────────────
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+
+  # ============================================================================
+  # CRON JOBS
+  # All times are UTC. ET offsets: EST = UTC-5, EDT = UTC-4.
+  # ============================================================================
+
+  # Cleanup expired refresh tokens and ended game sessions
+  - type: cron
+    name: coachiq-daily-cleanup
+    runtime: node
+    buildCommand: npm install
+    startCommand: node jobs/dailyCleanup.js
+    schedule: "0 6 * * *"   # 6:00 AM UTC / 1:00 AM ET (EST)
+    region: oregon
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: coachiq-db
+          property: connectionString
+
+  # Weekly AI usage and cost summary per coach (for future billing/monitoring)
+  - type: cron
+    name: coachiq-weekly-ai-usage
+    runtime: node
+    buildCommand: npm install
+    startCommand: node jobs/weeklyAiUsage.js
+    schedule: "0 7 * * 1"   # Monday 7:00 AM UTC / 2:00 AM ET (EST)
+    region: oregon
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: coachiq-db
+          property: connectionString
+
+# ==============================================================================
+# DATABASE
+# ==============================================================================
+databases:
+  - name: coachiq-db
+    databaseName: coachiq
+    user: coachiq
+    region: oregon
+    plan: starter
+    postgresMajorVersion: "16"
+    ipAllowList: []   # empty = allow all (Render internal traffic only by default)
