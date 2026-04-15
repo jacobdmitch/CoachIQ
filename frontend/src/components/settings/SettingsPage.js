@@ -47,7 +47,7 @@ export default function SettingsPage() {
   // ── Team identity state ────────────────────────────────
   const [teamName,     setTeamName]     = useState(team?.teamName     || '');
   const [season,       setSeason]       = useState(team?.season       || '');
-  const [gameFormat,   setGameFormat]   = useState(team?.gameFormat   || '10v10');
+  const [gameFormat,   setGameFormat]   = useState(team?.gameFormat   || 'standard');
   const [primaryColor, setPrimaryColor] = useState(team?.primaryColor || '#C9A227');
   const [hexInput,     setHexInput]     = useState(team?.primaryColor || '#C9A227');
   const [teamSaving,   setTeamSaving]   = useState(false);
@@ -283,10 +283,8 @@ export default function SettingsPage() {
                 value={gameFormat}
                 onChange={e => setGameFormat(e.target.value)}
               >
-                <option value="10v10">10 v 10</option>
-                <option value="9v9">9 v 9</option>
-                <option value="7v7">7 v 7</option>
-                <option value="6v6">6 v 6</option>
+                <option value="standard">Standard (10v10)</option>
+                <option value="6s">Sixes (6v6)</option>
               </select>
             </div>
 

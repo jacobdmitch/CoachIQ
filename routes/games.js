@@ -80,6 +80,7 @@ router.get('/:id', authenticateToken, asyncHandler(async (req, res) => {
 router.post('/', authenticateToken, asyncHandler(async (req, res) => {
   const { teamId, opponent, gameDate, location, format = 'standard', notes } = req.body;
   if (!teamId || !opponent) throw new AppError('teamId and opponent are required.', 400);
+  if (!gameDate) throw new AppError('gameDate is required.', 400);
 
   await requireTeamAccess(req.coachId, teamId);
 

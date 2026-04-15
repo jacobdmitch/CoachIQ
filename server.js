@@ -1,4 +1,17 @@
 import 'dotenv/config';
+
+// ─── Production secret guard — fail fast before binding any port ──────────────
+if (process.env.NODE_ENV === 'production') {
+  const missing = [];
+  if (!process.env.JWT_SECRET)         missing.push('JWT_SECRET');
+  if (!process.env.JWT_REFRESH_SECRET) missing.push('JWT_REFRESH_SECRET');
+  if (!process.env.DATABASE_URL)       missing.push('DATABASE_URL');
+  if (missing.length > 0) {
+    console.error(`FATAL: Missing required environment variables: ${missing.join(', ')}`);
+    process.exit(1);
+  }
+}
+
 import express from 'express';
 import http from 'http';
 import cors from 'cors';
@@ -18,7 +31,6 @@ import teamsRouter from './routes/teams.js';
 import athletesRouter from './routes/athletes.js';
 import gamesRouter from './routes/games.js';
 import gameLiveRouter from './routes/game-live.js';
-import statsRouter from './routes/stats.js';
 import aiCoachRouter from './routes/ai-coach.js';
 import playsRouter from './routes/plays.js';
 import practiceRouter from './routes/practice.js';
@@ -108,7 +120,6 @@ app.use('/api/teams', teamsRouter);
 app.use('/api/athletes', athletesRouter);
 app.use('/api/games', gamesRouter);
 app.use('/api/game-live', gameLiveRouter);
-app.use('/api/stats', statsRouter);
 app.use('/api/ai-coach', aiCoachRouter);
 app.use('/api/plays', playsRouter);
 app.use('/api/practice', practiceRouter);

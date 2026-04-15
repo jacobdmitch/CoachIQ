@@ -7,6 +7,7 @@ import { query } from '../services/database.js';
 import { getLineCoachRecommendation, getPositionRecommendation } from '../services/lineCoachEngine.js';
 import { getPositionRecommendations } from '../services/positionEngine.js';
 import { logAICall, getGameAIStats, getGameCallHistory } from '../services/aiCallLogger.js';
+import { gameStates, playtimeTrackers } from '../services/liveGameStore.js';
 
 const router = express.Router();
 
@@ -18,19 +19,6 @@ const aiRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
-
-// Reference to game state and playtime (shared from game-live.js)
-// In production, use Redis or database for cross-request state
-const gameStates = new Map();
-const playtimeTrackers = new Map();
-
-// Helper to set references from server
-export function setGameStateReferences(states, trackers) {
-  gameStates.clear();
-  playtimeTrackers.clear();
-  states.forEach((v, k) => gameStates.set(k, v));
-  trackers.forEach((v, k) => playtimeTrackers.set(k, v));
-}
 
 /**
  * POST /recommendations

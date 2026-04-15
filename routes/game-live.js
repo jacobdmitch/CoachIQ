@@ -8,6 +8,7 @@ import PlaytimeTracker from '../services/playtimeTracker.js';
 import { z } from 'zod';
 import { persistGameEvent, persistPlaytimeEntry, saveGameStateSnapshot, loadGameStateSnapshot } from '../services/gamePersistence.js';
 import { broadcastGameUpdate } from './game-sync.js';
+import { gameStates, playtimeTrackers, clockIntervals } from '../services/liveGameStore.js';
 
 const subSchema = z.object({
   playerIn: z.string().uuid(),
@@ -28,9 +29,38 @@ const scoreSchema = z.object({
 
 const router = express.Router();
 
-// In-memory game state storage (for production use Redis)
-const gameStates = new Map();
-const playtimeTrackers = new Map();
+// ─── Clock tick helpers ──────────────────────────────────────────────────────
+
+/**
+ * Start the server-side clock interval for a game.
+ * Emits a `clock_tick` event every second to all connected clients so their
+ * displays stay in sync regardless of when they joined.
+ */
+function startClockInterval(gameId) {
+  if (clockIntervals.has(gameId)) return; // already running
+  const interval = setInterval(() => {
+    const gs = gameStates.get(gameId);
+    if (!gs || !gs.clockRunning) {
+      stopClockInterval(gameId);
+      return;
+    }
+    const elapsed = Math.floor((Date.now() - gs.startTime) / 1000);
+    gs.clockTime = elapsed;
+    broadcastGameUpdate(gameId, 'clock_tick', { clockTime: elapsed });
+  }, 1000);
+  clockIntervals.set(gameId, interval);
+}
+
+/**
+ * Clear the clock interval for a game (called on stop, end, or server restart).
+ */
+function stopClockInterval(gameId) {
+  const interval = clockIntervals.get(gameId);
+  if (interval) {
+    clearInterval(interval);
+    clockIntervals.delete(gameId);
+  }
+}
 
 /**
  * POST /:gameId/start
@@ -100,6 +130,7 @@ router.post(
       throw new AppError('Clock is already running', 400);
     }
 
+    startClockInterval(gameId);
     broadcastGameUpdate(gameId, 'state_update', { event, state: gameState.getState() });
     logger.info(`Clock started: ${gameId}`);
 
@@ -131,6 +162,7 @@ router.post(
       throw new AppError('Clock is not running', 400);
     }
 
+    stopClockInterval(gameId);
     broadcastGameUpdate(gameId, 'state_update', { event, state: gameState.getState() });
     logger.info(`Clock stopped: ${gameId}`);
 
@@ -158,6 +190,7 @@ router.post(
     }
 
     const event = gameState.endPeriod();
+    stopClockInterval(gameId); // clock is frozen between periods
     const playtimeTracker = playtimeTrackers.get(gameId);
     if (playtimeTracker) {
       playtimeTracker.endPeriod();
@@ -415,7 +448,8 @@ router.post(
       [JSON.stringify(gameState.getState()), gameId]
     );
 
-    // Clean up memory
+    // Clean up memory and clock interval
+    stopClockInterval(gameId);
     gameStates.delete(gameId);
     playtimeTrackers.delete(gameId);
 

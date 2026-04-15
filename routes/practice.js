@@ -18,6 +18,66 @@ const router = express.Router();
 router.use(authenticateToken);
 
 // ============================================================================
+// DRILL LIBRARY ENDPOINTS — must be registered before /:id to avoid conflict
+// ============================================================================
+
+/**
+ * GET /api/practice/drills/library
+ * Return all drills from the knowledge base JSON (cached in memory)
+ */
+router.get('/drills/library', async (req, res) => {
+  try {
+    const drills = await getDrillLibrary();
+    res.json({ drills });
+  } catch (err) {
+    logger.error('Error retrieving drill library:', err);
+    res.status(500).json({ error: 'Failed to retrieve drill library' });
+  }
+});
+
+/**
+ * GET /api/practice/drills/:drill_id
+ * Get single drill detail from the cached library
+ */
+router.get('/drills/:drill_id', async (req, res) => {
+  try {
+    const { drill_id } = req.params;
+    const drill = await getDrillById(drill_id);
+
+    if (!drill) {
+      return res.status(404).json({ error: 'Drill not found' });
+    }
+
+    res.json(drill);
+  } catch (err) {
+    logger.error('Error retrieving drill:', err);
+    res.status(500).json({ error: 'Failed to retrieve drill' });
+  }
+});
+
+// ============================================================================
+// PRACTICE ANALYSIS ENDPOINT — must be registered before /:id to avoid conflict
+// ============================================================================
+
+/**
+ * GET /api/practice/analysis/:teamId
+ * Deterministic practice gap analysis (no Claude call)
+ * Returns: { stalledSkills: [...], recommendations: [...] }
+ */
+router.get('/analysis/:teamId', async (req, res) => {
+  try {
+    const { teamId } = req.params;
+    const coachId = req.coachId;
+
+    const analysis = await getPracticeGapAnalysis(teamId, coachId);
+    res.json(analysis);
+  } catch (err) {
+    logger.error('Error analyzing practice gap:', err);
+    res.status(500).json({ error: 'Failed to analyze practice gap' });
+  }
+});
+
+// ============================================================================
 // PRACTICE SESSIONS ENDPOINTS
 // ============================================================================
 
@@ -146,67 +206,6 @@ router.delete('/:id', async (req, res) => {
   } catch (err) {
     logger.error('Error deleting practice session:', err);
     res.status(500).json({ error: 'Failed to delete practice session' });
-  }
-});
-
-// ============================================================================
-// DRILL LIBRARY ENDPOINTS
-// ============================================================================
-
-/**
- * GET /api/practice/drills/library
- * Return all 30 drills from the knowledge base JSON
- * Cached in memory for performance
- */
-router.get('/drills/library', async (req, res) => {
-  try {
-    const drills = await getDrillLibrary();
-    res.json({ drills });
-  } catch (err) {
-    logger.error('Error retrieving drill library:', err);
-    res.status(500).json({ error: 'Failed to retrieve drill library' });
-  }
-});
-
-/**
- * GET /api/practice/drills/:drill_id
- * Get single drill detail from the cached library
- */
-router.get('/drills/:drill_id', async (req, res) => {
-  try {
-    const { drill_id } = req.params;
-    const drill = await getDrillById(drill_id);
-
-    if (!drill) {
-      return res.status(404).json({ error: 'Drill not found' });
-    }
-
-    res.json(drill);
-  } catch (err) {
-    logger.error('Error retrieving drill:', err);
-    res.status(500).json({ error: 'Failed to retrieve drill' });
-  }
-});
-
-// ============================================================================
-// PRACTICE ANALYSIS ENDPOINT
-// ============================================================================
-
-/**
- * GET /api/practice/analysis/:teamId
- * AI-powered practice gap analysis (deterministic, no Claude call)
- * Returns: { stalledSkills: [...], recommendations: [...] }
- */
-router.get('/analysis/:teamId', async (req, res) => {
-  try {
-    const { teamId } = req.params;
-    const coachId = req.coachId;
-
-    const analysis = await getPracticeGapAnalysis(teamId, coachId);
-    res.json(analysis);
-  } catch (err) {
-    logger.error('Error analyzing practice gap:', err);
-    res.status(500).json({ error: 'Failed to analyze practice gap' });
   }
 });
 

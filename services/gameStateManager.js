@@ -26,8 +26,8 @@ export class GameStateManager {
     this.clockTime = 0; // seconds elapsed in current period
     this.periodDuration = this.format === '6s' ? 12 * 60 : 15 * 60; // 12 min for 6s, 15 for standard
 
-    this.homeScore = game.home_score || 0;
-    this.awayScore = game.away_score || 0;
+    this.homeScore = game.score_home || 0;
+    this.awayScore = game.score_away || 0;
 
     // Lineup tracking
     this.athletes = athletes;

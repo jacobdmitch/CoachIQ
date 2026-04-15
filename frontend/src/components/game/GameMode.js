@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useGames, useGame } from '../../hooks/useGame';
 import { useGameSocket } from '../../hooks/useGameSocket';
@@ -19,6 +19,7 @@ function formatClock(seconds) {
 
 function GamePicker({ teamId }) {
   const { games, loading, scheduleGame } = useGames(teamId);
+  const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
   const [opponent, setOpponent] = useState('');
 
@@ -29,8 +30,9 @@ function GamePicker({ teamId }) {
     if (!opponent.trim()) return;
     setCreating(true);
     try {
-      await scheduleGame({ opponent: opponent.trim() });
-      setOpponent('');
+      const today = new Date().toISOString().split('T')[0];
+      const game = await scheduleGame({ opponent: opponent.trim(), gameDate: today });
+      navigate(`/game/${game.id}`);
     } finally {
       setCreating(false);
     }
@@ -87,7 +89,7 @@ function GamePicker({ teamId }) {
               )}
             </div>
             <Badge variant="amber">{g.status}</Badge>
-            <Button variant="outline" size="sm" onClick={() => window.location.href = `/game/${g.id}`}>
+            <Button variant="outline" size="sm" onClick={() => navigate(`/game/${g.id}`)}>
               Open
             </Button>
           </div>
