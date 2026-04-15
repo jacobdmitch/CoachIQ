@@ -66,7 +66,16 @@ export default function SeasonDashboard() {
     );
   }
 
-  const { record, stats, roster, recentGames = [], topScorers = [] } = data || {};
+  const {
+    record,
+    stats,
+    roster,
+    recentGames     = [],
+    topScorers      = [],
+    playtimeEquity  = [],
+    playtimeFlags   = [],
+    avgMinutes      = 0,
+  } = data || {};
   const wins     = parseInt(record?.wins   || 0);
   const losses   = parseInt(record?.losses || 0);
   const total    = wins + losses;
@@ -180,6 +189,74 @@ export default function SeasonDashboard() {
         </div>
 
       </div>
+
+      {/* Playtime equity */}
+      {playtimeEquity.length > 0 && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--sp-3)', marginBottom: 'var(--sp-4)' }}>
+            <p className="section-heading" style={{ margin: 0 }}>Playtime Equity</p>
+            <span style={{ fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+              Team avg {avgMinutes} min
+            </span>
+          </div>
+
+          {/* Flags */}
+          {playtimeFlags.length > 0 && (
+            <div style={{ marginBottom: 'var(--sp-4)' }}>
+              {playtimeFlags.map(flag => (
+                <div key={flag.athleteId} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--sp-3)',
+                  padding: 'var(--sp-2) var(--sp-4)',
+                  background: 'var(--color-amber-bg, rgba(245,158,11,0.08))',
+                  border: '1px solid var(--color-amber-border, rgba(245,158,11,0.25))',
+                  borderRadius: 'var(--radius-sm)',
+                  marginBottom: 'var(--sp-2)',
+                }}>
+                  <Badge variant="amber" dot>Low PT</Badge>
+                  <span style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)' }}>
+                    #{flag.jerseyNumber} {flag.name}
+                  </span>
+                  <span style={{ fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
+                    {flag.message}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Bar chart */}
+          <div className="card" style={{ padding: 'var(--sp-5)', marginBottom: 'var(--sp-8)' }}>
+            {playtimeEquity.map(athlete => {
+              const pct = avgMinutes > 0 ? Math.min((athlete.totalMinutes / (avgMinutes * 2)) * 100, 100) : 0;
+              const isFlagged = playtimeFlags.some(f => f.athleteId === athlete.athleteId);
+              return (
+                <div key={athlete.athleteId} style={{ marginBottom: 'var(--sp-3)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                    <span style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)', color: isFlagged ? 'var(--color-amber, #f59e0b)' : 'var(--color-text-secondary)' }}>
+                      #{athlete.jerseyNumber} {athlete.lastName}
+                    </span>
+                    <span style={{ fontFamily: 'var(--font-stats)', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                      {athlete.totalMinutes}m
+                    </span>
+                  </div>
+                  <div style={{ height: 6, background: 'var(--color-surface-2)', borderRadius: 3, overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${pct}%`,
+                      background: isFlagged ? 'var(--color-amber, #f59e0b)' : 'var(--color-gold)',
+                      borderRadius: 3,
+                      transition: 'width 0.4s ease',
+                    }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
     </div>
   );
 }

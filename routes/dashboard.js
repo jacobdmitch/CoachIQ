@@ -84,15 +84,65 @@ router.get('/season/:teamId', authenticateToken, asyncHandler(async (req, res) =
     [teamId]
   );
 
+  // Playtime equity — total minutes per active athlete across all completed games
+  const playtimeResult = await query(
+    `SELECT
+       a.id            AS athlete_id,
+       a.first_name,
+       a.last_name,
+       a.jersey_number,
+       a.primary_position,
+       COALESCE(SUM(pl.minutes_played), 0) AS total_minutes,
+       COUNT(DISTINCT pl.game_id)           AS games_played
+     FROM athletes a
+     LEFT JOIN playtime_log pl ON a.id = pl.athlete_id
+       AND pl.game_id IN (SELECT id FROM games WHERE team_id = $1 AND status = 'completed')
+     WHERE a.team_id = $1 AND a.status = 'active'
+     GROUP BY a.id, a.first_name, a.last_name, a.jersey_number, a.primary_position
+     ORDER BY total_minutes DESC`,
+    [teamId]
+  );
+  const playtimeRows = playtimeResult.rows;
+
+  // Average minutes across the roster to identify outliers
+  const totalMinutesSum = playtimeRows.reduce((sum, r) => sum + parseFloat(r.total_minutes), 0);
+  const avgMinutes = playtimeRows.length > 0 ? totalMinutesSum / playtimeRows.length : 0;
+  const gamesPlayed = parseInt(record.games_played) || 0;
+
+  // Flag athletes with < 40% of team average playtime (only meaningful after games are played)
+  const playtimeFlags = gamesPlayed > 0
+    ? playtimeRows
+        .filter(r => parseFloat(r.total_minutes) < avgMinutes * 0.4)
+        .map(r => ({
+          athleteId:    r.athlete_id,
+          name:         `${r.first_name} ${r.last_name}`,
+          jerseyNumber: r.jersey_number,
+          totalMinutes: parseFloat(r.total_minutes),
+          flag:         'below_threshold',
+          message:      `${parseFloat(r.total_minutes).toFixed(0)} min total — below team avg (${avgMinutes.toFixed(0)} min)`,
+        }))
+    : [];
+
   res.json({
     success: true,
     dashboard: {
-      team:        teamResult.rows[0],
-      record:      { ...record, winPct: stats.win_pct ? Math.round(parseFloat(stats.win_pct)) : 0 },
-      stats:       { avgGoalsFor: stats.avg_goals_for, avgGoalsAgainst: stats.avg_goals_against },
+      team:          teamResult.rows[0],
+      record:        { ...record, winPct: stats.win_pct ? Math.round(parseFloat(stats.win_pct)) : 0 },
+      stats:         { avgGoalsFor: stats.avg_goals_for, avgGoalsAgainst: stats.avg_goals_against },
       roster,
-      recentGames: recentResult.rows,
-      topScorers:  topScorersResult.rows,
+      recentGames:   recentResult.rows,
+      topScorers:    topScorersResult.rows,
+      playtimeEquity: playtimeRows.map(r => ({
+        athleteId:    r.athlete_id,
+        firstName:    r.first_name,
+        lastName:     r.last_name,
+        jerseyNumber: r.jersey_number,
+        position:     r.primary_position,
+        totalMinutes: parseFloat(r.total_minutes),
+        gamesPlayed:  parseInt(r.games_played),
+      })),
+      playtimeFlags,
+      avgMinutes:    parseFloat(avgMinutes.toFixed(1)),
     },
   });
 }));

@@ -1,16 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 import { useGames, useGame } from '../../hooks/useGame';
 import { useGameSocket } from '../../hooks/useGameSocket';
 import { useLines } from '../../hooks/useLines';
 import { useRoster } from '../../hooks/useRoster';
+import apiClient from '../../config/api';
 import Badge from '../common/Badge';
 import Button from '../common/Button';
 import GameSetup from './GameSetup';
 import StagingPanel from './StagingPanel';
+import AICoachPanel from '../ai/AICoachPanel';
 
 const PERIODS = ['1st', '2nd', '3rd', '4th', 'OT'];
+
+// Default shot clock for 6s format (seconds); overridden by game.shot_clock_seconds
+const DEFAULT_SHOT_CLOCK = 60;
 
 function formatClock(seconds) {
   if (seconds === null || seconds === undefined) return '—:——';
@@ -19,7 +25,7 @@ function formatClock(seconds) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-// ─── No game selected — pick from schedule ───────────────────────────────────
+// ─── Game picker (no game selected) ──────────────────────────────────────────
 
 function GamePicker({ teamId }) {
   const { games, loading, scheduleGame } = useGames(teamId);
@@ -51,13 +57,9 @@ function GamePicker({ teamId }) {
         </div>
       </div>
 
-      {/* Quick create */}
       <p className="section-heading">New Game</p>
       <div className="card" style={{ marginBottom: 'var(--sp-8)' }}>
-        <form
-          onSubmit={handleCreate}
-          style={{ display: 'flex', gap: 'var(--sp-3)', flexWrap: 'wrap' }}
-        >
+        <form onSubmit={handleCreate} style={{ display: 'flex', gap: 'var(--sp-3)', flexWrap: 'wrap' }}>
           <input
             placeholder="Opponent name"
             value={opponent}
@@ -70,7 +72,6 @@ function GamePicker({ teamId }) {
         </form>
       </div>
 
-      {/* Upcoming */}
       <p className="section-heading">Scheduled Games</p>
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         {loading && (
@@ -109,7 +110,7 @@ function GamePicker({ teamId }) {
   );
 }
 
-// ─── Score control — large touch targets ─────────────────────────────────────
+// ─── Score control ────────────────────────────────────────────────────────────
 
 function ScoreControl({ score, side, onAdjust }) {
   const btnBase = {
@@ -121,7 +122,6 @@ function ScoreControl({ score, side, onAdjust }) {
     alignItems: 'center',
     justifyContent: 'center',
     transition: 'all var(--ease-fast)',
-    // Apple HIG: minimum 44pt, but score controls warrant larger
     width:  'clamp(44px, 12vw, 60px)',
     height: 'clamp(44px, 12vw, 60px)',
     flexShrink: 0,
@@ -131,24 +131,15 @@ function ScoreControl({ score, side, onAdjust }) {
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--sp-4)' }}>
-      {/* Minus */}
       <button
         onClick={() => onAdjust(side, -1)}
-        style={{
-          ...btnBase,
-          background: 'var(--color-surface-1)',
-          border: '1px solid var(--color-surface-3)',
-          color: 'var(--color-text-muted)',
-        }}
+        style={{ ...btnBase, background: 'var(--color-surface-1)', border: '1px solid var(--color-surface-3)', color: 'var(--color-text-muted)' }}
         onPointerDown={e => e.currentTarget.style.transform = 'scale(0.92)'}
-        onPointerUp={e => e.currentTarget.style.transform   = 'scale(1)'}
+        onPointerUp={e => e.currentTarget.style.transform = 'scale(1)'}
         onPointerLeave={e => e.currentTarget.style.transform = 'scale(1)'}
         aria-label={`Decrease ${side} score`}
-      >
-        −
-      </button>
+      >−</button>
 
-      {/* Score display */}
       <span style={{
         fontFamily: 'var(--font-stats)',
         fontSize: 'clamp(var(--text-3xl), 10vw, var(--text-4xl))',
@@ -161,27 +152,398 @@ function ScoreControl({ score, side, onAdjust }) {
         {score}
       </span>
 
-      {/* Plus */}
       <button
         onClick={() => onAdjust(side, 1)}
-        style={{
-          ...btnBase,
-          background: 'var(--color-gold-muted)',
-          border: '1px solid var(--color-gold-border)',
-          color: 'var(--color-gold)',
-        }}
+        style={{ ...btnBase, background: 'var(--color-gold-muted)', border: '1px solid var(--color-gold-border)', color: 'var(--color-gold)' }}
         onPointerDown={e => e.currentTarget.style.transform = 'scale(0.92)'}
-        onPointerUp={e => e.currentTarget.style.transform   = 'scale(1)'}
+        onPointerUp={e => e.currentTarget.style.transform = 'scale(1)'}
         onPointerLeave={e => e.currentTarget.style.transform = 'scale(1)'}
         aria-label={`Increase ${side} score`}
-      >
-        +
-      </button>
+      >+</button>
     </div>
   );
 }
 
-// ─── Live game scoreboard ─────────────────────────────────────────────────────
+// ─── Shot clock (6s format only) ─────────────────────────────────────────────
+
+function ShotClock({ initialSeconds }) {
+  const [timeLeft, setTimeLeft]   = useState(initialSeconds);
+  const [running,  setRunning]    = useState(false);
+  const intervalRef               = useRef(null);
+
+  // Reset when initialSeconds changes (e.g. game format loaded)
+  useEffect(() => { setTimeLeft(initialSeconds); }, [initialSeconds]);
+
+  useEffect(() => {
+    if (running) {
+      intervalRef.current = setInterval(() => {
+        setTimeLeft(prev => {
+          if (prev <= 1) {
+            clearInterval(intervalRef.current);
+            setRunning(false);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      clearInterval(intervalRef.current);
+    }
+    return () => clearInterval(intervalRef.current);
+  }, [running]);
+
+  function reset() {
+    clearInterval(intervalRef.current);
+    setRunning(false);
+    setTimeLeft(initialSeconds);
+  }
+
+  const urgent = timeLeft <= 10;
+  const expired = timeLeft === 0;
+
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 'var(--sp-3)',
+      padding: 'var(--sp-3) var(--sp-4)',
+      background: expired ? 'var(--color-red-bg)' : urgent ? 'rgba(239,68,68,0.08)' : 'var(--color-surface-1)',
+      border: `1px solid ${expired ? 'var(--color-red-border)' : urgent ? 'rgba(239,68,68,0.3)' : 'var(--color-surface-2)'}`,
+      borderRadius: 'var(--radius-md)',
+    }}>
+      <span style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)', letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>
+        Shot Clock
+      </span>
+      <span style={{
+        fontFamily: 'var(--font-stats)',
+        fontSize: 'var(--text-2xl)',
+        color: expired ? 'var(--color-red)' : urgent ? '#f97316' : 'var(--color-text-primary)',
+        minWidth: 44,
+        textAlign: 'center',
+        fontVariantNumeric: 'tabular-nums',
+        letterSpacing: 2,
+      }}>
+        {timeLeft}
+      </span>
+      <div style={{ display: 'flex', gap: 'var(--sp-2)', marginLeft: 'auto' }}>
+        <button
+          onClick={() => setRunning(r => !r)}
+          style={{
+            padding: 'var(--sp-2) var(--sp-3)',
+            borderRadius: 'var(--radius-sm)',
+            background: running ? 'var(--color-red-bg)' : 'var(--color-green-bg)',
+            border: running ? '1px solid var(--color-red-border)' : '1px solid var(--color-green-border)',
+            color: running ? 'var(--color-red)' : 'var(--color-green)',
+            fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)',
+            cursor: 'pointer', minHeight: 36,
+          }}
+        >
+          {running ? '⏸' : '▶'}
+        </button>
+        <button
+          onClick={reset}
+          style={{
+            padding: 'var(--sp-2) var(--sp-3)',
+            borderRadius: 'var(--radius-sm)',
+            background: 'var(--color-surface-2)',
+            border: '1px solid var(--color-surface-3)',
+            color: 'var(--color-text-muted)',
+            fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)',
+            cursor: 'pointer', minHeight: 36,
+          }}
+        >
+          Reset
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Stat logging sheet ───────────────────────────────────────────────────────
+
+const STAT_EVENTS = [
+  { type: 'goal',           label: 'Goal',        color: 'var(--color-gold)' },
+  { type: 'assist',         label: 'Assist',      color: 'var(--color-gold)' },
+  { type: 'shot',           label: 'Shot',        color: 'var(--color-blue)' },
+  { type: 'ground_ball',    label: 'Ground Ball', color: 'var(--color-green)' },
+  { type: 'turnover',       label: 'Turnover',    color: 'var(--color-red)' },
+  { type: 'caused_turnover',label: 'Caused TO',   color: 'var(--color-green)' },
+  { type: 'save',           label: 'Save',        color: 'var(--color-blue)' },
+];
+
+function StatLogger({ gameId, athletes, period, clockSeconds, onClose }) {
+  const toast             = useToast();
+  const [selected, setSelected] = useState(null); // athleteId
+  const [logging,  setLogging]  = useState(false);
+
+  const fieldPlayers = athletes || [];
+
+  async function logStat(eventType) {
+    if (!selected || !gameId) return;
+    setLogging(true);
+    try {
+      await apiClient.post(`/game-live/${gameId}/event`, {
+        eventType: eventType.toUpperCase(),
+        athleteId: selected,
+        metadata:  { period, clockSeconds },
+      });
+      toast.success(`${STAT_EVENTS.find(e => e.type === eventType)?.label || eventType} logged`);
+      setSelected(null);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to log stat');
+    } finally {
+      setLogging(false);
+    }
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 200,
+      display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+    }}>
+      {/* Overlay */}
+      <div
+        style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)' }}
+        onClick={onClose}
+      />
+
+      {/* Sheet */}
+      <div style={{
+        position: 'relative',
+        background: 'var(--color-surface-0)',
+        borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0',
+        padding: 'var(--sp-5)',
+        maxHeight: '70dvh',
+        overflowY: 'auto',
+      }}>
+        {/* Handle */}
+        <div style={{ width: 40, height: 4, background: 'var(--color-surface-3)', borderRadius: 2, margin: '0 auto var(--sp-5)' }} />
+
+        <p className="section-heading" style={{ marginBottom: 'var(--sp-4)' }}>
+          {selected ? 'Tap the event to log' : 'Tap a player'}
+        </p>
+
+        {/* Player grid */}
+        {!selected && (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
+            gap: 'var(--sp-2)',
+            marginBottom: 'var(--sp-5)',
+          }}>
+            {fieldPlayers.map(a => (
+              <button
+                key={a.id}
+                onClick={() => setSelected(a.id)}
+                style={{
+                  padding: 'var(--sp-3)',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'var(--color-surface-1)',
+                  border: '1px solid var(--color-surface-2)',
+                  cursor: 'pointer',
+                  textAlign: 'center',
+                  transition: 'all var(--ease-fast)',
+                }}
+                onPointerDown={e => e.currentTarget.style.transform = 'scale(0.95)'}
+                onPointerUp={e => e.currentTarget.style.transform = 'scale(1)'}
+                onPointerLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+              >
+                <div style={{ fontFamily: 'var(--font-stats)', fontSize: 'var(--text-xl)', color: 'var(--color-gold)' }}>
+                  {a.jersey_number ?? '—'}
+                </div>
+                <div style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {a.last_name}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Event buttons — shown after player is selected */}
+        {selected && (
+          <>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 'var(--sp-3)',
+              marginBottom: 'var(--sp-4)',
+              padding: 'var(--sp-3)',
+              background: 'var(--color-gold-muted)',
+              border: '1px solid var(--color-gold-border)',
+              borderRadius: 'var(--radius-md)',
+            }}>
+              {(() => {
+                const a = fieldPlayers.find(p => p.id === selected);
+                return a ? (
+                  <>
+                    <span style={{ fontFamily: 'var(--font-stats)', fontSize: 'var(--text-lg)', color: 'var(--color-gold)' }}>
+                      {a.jersey_number}
+                    </span>
+                    <span style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)' }}>
+                      {a.first_name} {a.last_name}
+                    </span>
+                  </>
+                ) : null;
+              })()}
+              <button
+                onClick={() => setSelected(null)}
+                style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 18 }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))',
+              gap: 'var(--sp-3)',
+            }}>
+              {STAT_EVENTS.map(ev => (
+                <button
+                  key={ev.type}
+                  onClick={() => logStat(ev.type)}
+                  disabled={logging}
+                  style={{
+                    padding: 'var(--sp-4)',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'var(--color-surface-1)',
+                    border: `1px solid var(--color-surface-2)`,
+                    cursor: logging ? 'wait' : 'pointer',
+                    fontFamily: 'var(--font-body)',
+                    fontWeight: 700,
+                    fontSize: 'var(--text-sm)',
+                    color: ev.color,
+                    textAlign: 'center',
+                    minHeight: 52,
+                    transition: 'all var(--ease-fast)',
+                    opacity: logging ? 0.5 : 1,
+                  }}
+                  onPointerDown={e => { if (!logging) e.currentTarget.style.transform = 'scale(0.95)'; }}
+                  onPointerUp={e => e.currentTarget.style.transform = 'scale(1)'}
+                  onPointerLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                  {ev.label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Faceoff tracker (standard format only) ───────────────────────────────────
+
+function FaceoffTracker({ gameId, athletes, period }) {
+  const toast = useToast();
+  const [pickingResult, setPickingResult] = useState(null); // 'win' | 'loss'
+  const [logging, setLogging] = useState(false);
+
+  const fogos = athletes.filter(a =>
+    a.primary_position === 'FOGO' || a.secondary_position === 'FOGO'
+  );
+  const options = fogos.length > 0 ? fogos : athletes;
+
+  async function logFaceoff(athleteId, result) {
+    if (!gameId) return;
+    setLogging(true);
+    try {
+      await apiClient.post(`/game-live/${gameId}/event`, {
+        eventType: result === 'win' ? 'FACEOFF_WIN' : 'FACEOFF_LOSS',
+        athleteId,
+        metadata:  { period },
+      });
+      toast.success(`Faceoff ${result}`);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to log faceoff');
+    } finally {
+      setLogging(false);
+      setPickingResult(null);
+    }
+  }
+
+  return (
+    <div style={{
+      padding: 'var(--sp-4)',
+      background: 'var(--color-surface-1)',
+      border: '1px solid var(--color-surface-2)',
+      borderRadius: 'var(--radius-md)',
+    }}>
+      <p style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)', letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 'var(--sp-3)' }}>
+        Faceoff
+      </p>
+
+      {!pickingResult ? (
+        <div style={{ display: 'flex', gap: 'var(--sp-3)' }}>
+          <button
+            onClick={() => setPickingResult('win')}
+            style={{
+              flex: 1, padding: 'var(--sp-3)', borderRadius: 'var(--radius-md)',
+              background: 'var(--color-green-bg)', border: '1px solid var(--color-green-border)',
+              color: 'var(--color-green)', fontFamily: 'var(--font-body)', fontWeight: 700,
+              fontSize: 'var(--text-sm)', cursor: 'pointer', minHeight: 44,
+            }}
+          >
+            Win
+          </button>
+          <button
+            onClick={() => setPickingResult('loss')}
+            style={{
+              flex: 1, padding: 'var(--sp-3)', borderRadius: 'var(--radius-md)',
+              background: 'var(--color-red-bg)', border: '1px solid var(--color-red-border)',
+              color: 'var(--color-red)', fontFamily: 'var(--font-body)', fontWeight: 700,
+              fontSize: 'var(--text-sm)', cursor: 'pointer', minHeight: 44,
+            }}
+          >
+            Loss
+          </button>
+        </div>
+      ) : (
+        <>
+          <p style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginBottom: 'var(--sp-3)' }}>
+            Who took the faceoff? ({pickingResult === 'win' ? 'Win' : 'Loss'})
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
+            {options.slice(0, 8).map(a => (
+              <button
+                key={a.id}
+                onClick={() => logFaceoff(a.id, pickingResult)}
+                disabled={logging}
+                style={{
+                  padding: 'var(--sp-2) var(--sp-3)',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'var(--color-surface-2)',
+                  border: '1px solid var(--color-surface-3)',
+                  color: 'var(--color-text-primary)',
+                  fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)',
+                  cursor: 'pointer', minHeight: 36,
+                  opacity: logging ? 0.5 : 1,
+                }}
+              >
+                #{a.jersey_number} {a.last_name}
+              </button>
+            ))}
+            <button
+              onClick={() => setPickingResult(null)}
+              style={{
+                padding: 'var(--sp-2) var(--sp-3)',
+                borderRadius: 'var(--radius-md)',
+                background: 'none',
+                border: '1px solid var(--color-surface-2)',
+                color: 'var(--color-text-muted)',
+                fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)',
+                cursor: 'pointer', minHeight: 36,
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Main GameMode component ──────────────────────────────────────────────────
 
 export default function GameMode() {
   const { gameId } = useParams();
@@ -195,13 +557,15 @@ export default function GameMode() {
     addToQueue, removeFromQueue, removeMoveFromQueue, activateQueue,
   } = useGameSocket(gameId, token);
 
-  const { lines } = useLines(team?.id);
+  const { lines }   = useLines(team?.id);
   const { athletes } = useRoster(team?.id);
 
   const [homeScore,    setHomeScore]    = useState(0);
   const [awayScore,    setAwayScore]    = useState(0);
   const [period,       setPeriod]       = useState(1);
   const [clockRunning, setClockRunning] = useState(false);
+  const [showStats,    setShowStats]    = useState(false);
+  const [aiOpen,       setAiOpen]       = useState(false);
 
   useEffect(() => {
     if (game) {
@@ -226,7 +590,6 @@ export default function GameMode() {
     </div>
   );
 
-  // ── Pre-game setup (game not yet started) ────────────────────────────────
   if (game?.status === 'scheduled') {
     return (
       <GameSetup
@@ -236,8 +599,15 @@ export default function GameMode() {
     );
   }
 
-  const leading = homeScore > awayScore ? 'home' : homeScore < awayScore ? 'away' : 'tied';
+  const is6s      = game?.format === '6s';
+  const leading   = homeScore > awayScore ? 'home' : homeScore < awayScore ? 'away' : 'tied';
   const displayClock = clockTime !== null ? formatClock(clockTime) : '——:——';
+  const shotClockSeconds = game?.shot_clock_seconds || DEFAULT_SHOT_CLOCK;
+
+  // Context string for the AI panel
+  const aiContext = game
+    ? `vs ${game.opponent} · Q${period} · ${homeScore}–${awayScore}`
+    : undefined;
 
   function adjustScore(side, delta) {
     const next = Math.max(0, (side === 'home' ? homeScore : awayScore) + delta);
@@ -300,7 +670,6 @@ export default function GameMode() {
                 borderBottom: i + 1 === period ? '2px solid var(--color-gold)' : '2px solid transparent',
                 paddingBottom: 4,
                 transition: 'all var(--ease-base)',
-                /* Expanded touch target */
                 paddingTop: 8,
                 paddingLeft: 'clamp(var(--sp-2), 2vw, var(--sp-3))',
                 paddingRight: 'clamp(var(--sp-2), 2vw, var(--sp-3))',
@@ -380,28 +749,60 @@ export default function GameMode() {
 
       </div>
 
+      {/* ── Shot clock (6s only) ─────────────────────────── */}
+      {is6s && (
+        <div style={{ marginBottom: 'var(--sp-6)' }}>
+          <ShotClock initialSeconds={shotClockSeconds} />
+        </div>
+      )}
+
       {/* ── Quick Actions ────────────────────────────────── */}
       <p className="section-heading">Quick Actions</p>
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(2, 1fr)',
+        gridTemplateColumns: 'repeat(3, 1fr)',
         gap: 'var(--sp-3)',
         marginBottom: 'var(--sp-6)',
       }}>
-        {[
-          { label: 'Timeout',  variant: 'secondary' },
-          { label: 'Flag Play', variant: 'outline'  },
-          { label: 'Ask AI',   variant: 'primary'   },
-        ].map(({ label, variant }) => (
+        <Button
+          variant="secondary"
+          style={{ width: '100%', justifyContent: 'center', minHeight: 52 }}
+          onClick={() => setShowStats(true)}
+        >
+          Log Stat
+        </Button>
+
+        {/* Faceoff only makes sense in standard format */}
+        {!is6s && (
           <Button
-            key={label}
-            variant={variant}
+            variant="outline"
             style={{ width: '100%', justifyContent: 'center', minHeight: 52 }}
+            onClick={() => document.getElementById('faceoff-section')?.scrollIntoView({ behavior: 'smooth' })}
           >
-            {label}
+            Faceoff
           </Button>
-        ))}
+        )}
+
+        <Button
+          variant="primary"
+          style={{ width: '100%', justifyContent: 'center', minHeight: 52, gridColumn: is6s ? 'span 2' : 'auto' }}
+          onClick={() => setAiOpen(true)}
+        >
+          Ask AI
+        </Button>
       </div>
+
+      {/* ── Faceoff tracker (standard only) ─────────────── */}
+      {!is6s && athletes && athletes.length > 0 && (
+        <div id="faceoff-section" style={{ marginBottom: 'var(--sp-6)' }}>
+          <p className="section-heading">Faceoff</p>
+          <FaceoffTracker
+            gameId={gameId}
+            athletes={athletes}
+            period={period}
+          />
+        </div>
+      )}
 
       {/* ── Substitution Staging ─────────────────────────── */}
       <div className="card" style={{ padding: 'var(--sp-5)' }}>
@@ -419,6 +820,25 @@ export default function GameMode() {
           activating={activating}
         />
       </div>
+
+      {/* ── Stat logging sheet ───────────────────────────── */}
+      {showStats && (
+        <StatLogger
+          gameId={gameId}
+          athletes={athletes || []}
+          period={period}
+          clockSeconds={clockTime}
+          onClose={() => setShowStats(false)}
+        />
+      )}
+
+      {/* ── AI Coach panel ───────────────────────────────── */}
+      <AICoachPanel
+        gameId={gameId}
+        context={aiContext}
+        forceOpen={aiOpen}
+        onClose={() => setAiOpen(false)}
+      />
 
     </div>
   );

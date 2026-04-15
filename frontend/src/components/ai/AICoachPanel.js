@@ -62,10 +62,12 @@ function Message({ role, text, suggestions = [] }) {
 /**
  * AICoachPanel
  *
- * @param {string} gameId  — if provided, fetches game-specific recommendations
- * @param {string} context — short description shown in the context bar (e.g. "vs Falcons · Q2")
+ * @param {string}   gameId    — if provided, fetches game-specific recommendations
+ * @param {string}   context   — short description shown in the context bar (e.g. "vs Falcons · Q2")
+ * @param {boolean}  forceOpen — when true, opens the panel (controlled from parent)
+ * @param {Function} onClose   — called when the panel is dismissed
  */
-export default function AICoachPanel({ gameId, context }) {
+export default function AICoachPanel({ gameId, context, forceOpen, onClose }) {
   const [open,     setOpen]     = useState(false);
   const [messages, setMessages] = useState([]);
   const [input,    setInput]    = useState('');
@@ -79,6 +81,17 @@ export default function AICoachPanel({ gameId, context }) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
+
+  // Sync with external open control (e.g. "Ask AI" button in GameMode)
+  useEffect(() => {
+    if (forceOpen) setOpen(true);
+  }, [forceOpen]);
+
+  // Unified close — updates internal state and notifies parent
+  const handleClose = useCallback(() => {
+    setOpen(false);
+    onClose?.();
+  }, [onClose]);
 
   // Mark as no new suggestions when panel opens
   useEffect(() => {
@@ -192,7 +205,7 @@ export default function AICoachPanel({ gameId, context }) {
       {/* Panel + overlay */}
       {open && (
         <>
-          <div className="ai-overlay" onClick={() => setOpen(false)} aria-hidden="true" />
+          <div className="ai-overlay" onClick={handleClose} aria-hidden="true" />
 
           <aside className="ai-panel" aria-label="AI Coach panel">
 
@@ -200,7 +213,7 @@ export default function AICoachPanel({ gameId, context }) {
             <div className="ai-panel-header">
               <BrainIcon className="ai-fab-icon" style={{ color: 'var(--color-gold)', width: 20, height: 20, flexShrink: 0 }} />
               <h2 className="ai-panel-title">LINE <span>COACH</span></h2>
-              <button className="ai-panel-close" onClick={() => setOpen(false)} aria-label="Close panel">
+              <button className="ai-panel-close" onClick={handleClose} aria-label="Close panel">
                 ✕
               </button>
             </div>
