@@ -26,7 +26,7 @@ function isValidHex(str) {
 function buildLogoUrl(path) {
   if (!path) return null;
   if (path.startsWith('http')) return path;
-  const base = process.env.REACT_APP_SOCKET_URL || 'http://localhost:3001';
+  const base = process.env.REACT_APP_SOCKET_URL || window.location.origin;
   return `${base}${path}`;
 }
 

@@ -10,7 +10,7 @@ import './TabletNav.css';
 function TeamLogo({ url, name }) {
   const src = url.startsWith('http')
     ? url
-    : `${process.env.REACT_APP_SOCKET_URL || 'http://localhost:3001'}${url}`;
+    : `${process.env.REACT_APP_SOCKET_URL || window.location.origin}${url}`;
   return (
     <img
       className="nav-team-logo"
