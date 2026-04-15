@@ -1,0 +1,857 @@
+{
+  "drills": [
+    {
+      "id": "drill_001",
+      "name": "3-Man Weave",
+      "category": "passing",
+      "skill_tags": ["passing", "transition", "field_awareness"],
+      "difficulty": "Intermediate",
+      "duration_minutes": 10,
+      "min_players": 3,
+      "optimal_players": 6,
+      "description": "Three players weave down the field passing to each other while moving laterally, finishing with a shot on goal. Focus on crisp passes and leading teammates into space.",
+      "coaching_points": [
+        "Crisp, one-touch passes",
+        "Lead your teammate into space",
+        "Maintain proper spacing and timing",
+        "Follow-through on release",
+        "Finish with quality shot"
+      ],
+      "setup": "Three lines at baseline, move down the field in a weaving pattern",
+      "progression": [
+        "Walk-through to build fundamentals",
+        "Half-speed weaving",
+        "Game-speed with defensive pressure",
+        "Add second weave group for competition"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Develops passing accuracy, timing, and field awareness under pressure"
+    },
+    {
+      "id": "drill_002",
+      "name": "Dodging Gates",
+      "category": "dodging",
+      "skill_tags": ["dodging", "footwork", "field_awareness"],
+      "difficulty": "Beginner",
+      "duration_minutes": 8,
+      "min_players": 2,
+      "optimal_players": 8,
+      "description": "Players navigate through cones set in a grid pattern, practicing various dodge types (face dodge, bull dodge, split dodge) at each gate.",
+      "coaching_points": [
+        "Low stick position on approach",
+        "Explosive leg drive",
+        "Keep ball on strong hand side",
+        "Protect stick with body",
+        "Vary dodge types"
+      ],
+      "setup": "Create grid of cones 5 yards apart, players move through weaving pattern",
+      "progression": [
+        "Cones only, walk-through",
+        "Half-speed with specific dodge type",
+        "Game speed with random dodge selection",
+        "Add passive defenders at each gate"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Improves footwork, stick control, and ability to create space"
+    },
+    {
+      "id": "drill_003",
+      "name": "Quick Stick Shooting",
+      "category": "shooting",
+      "skill_tags": ["shooting", "release", "ground_balls"],
+      "difficulty": "Intermediate",
+      "duration_minutes": 12,
+      "min_players": 2,
+      "optimal_players": 6,
+      "description": "Partners feed ball to shooter who immediately releases shot within 1-2 seconds. Emphasizes quick release and accuracy from 10-15 yards.",
+      "coaching_points": [
+        "Quick stick reset after receive",
+        "Proper shooting form on catch",
+        "Follow through on release",
+        "Target specific areas of goal",
+        "Consistency over power"
+      ],
+      "setup": "One feeder, one shooter, goalie in goal. Rotate through line",
+      "progression": [
+        "Stationary shots from various angles",
+        "One-step shots (move into shot)",
+        "Moving shots with step-down",
+        "Contested shots with defensive pressure"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Develops quick release, shot accuracy, and decision-making under time pressure"
+    },
+    {
+      "id": "drill_004",
+      "name": "Ground Ball Outs",
+      "category": "ground_balls",
+      "skill_tags": ["ground_balls", "transition", "conditioning"],
+      "difficulty": "Intermediate",
+      "duration_minutes": 10,
+      "min_players": 4,
+      "optimal_players": 8,
+      "description": "Coach rolls loose balls out to waiting players who must scoop and sprint to baseline (end line), then transition back for outlet pass.",
+      "coaching_points": [
+        "Low approach to scoop",
+        "Hands and feet moving together",
+        "Secure ball before accelerating",
+        "Sprint at full speed to outlet",
+        "Quick transition outlet pass"
+      ],
+      "setup": "Four corners of field, coach at midfield rolling balls out",
+      "progression": [
+        "No pressure, focus on scoops",
+        "Passive defender following",
+        "Active defender competing for ball",
+        "Double outs with two balls in play"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Improves ground ball technique, transition speed, and conditioning"
+    },
+    {
+      "id": "drill_005",
+      "name": "Defensive Positioning Drill",
+      "category": "defense",
+      "skill_tags": ["defense", "field_awareness", "positioning"],
+      "difficulty": "Intermediate",
+      "duration_minutes": 12,
+      "min_players": 3,
+      "optimal_players": 8,
+      "description": "Defender stays between attacker and goal, adjusting position based on ball location. Focus on body positioning, stick placement, and leverage.",
+      "coaching_points": [
+        "Proper ready position (low, knees bent)",
+        "Keep attacker on weak hand side when possible",
+        "Maintain 1-2 yard distance",
+        "Hands low on approach",
+        "Anticipate dodges"
+      ],
+      "setup": "Attacker-defender pairs in confined area near goal",
+      "progression": [
+        "Stationary positioning with coach directing",
+        "Attacker moves side to side",
+        "Attacker performs dodge attempts",
+        "Live 1v1 inside crease area"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Builds defensive fundamentals, body awareness, and anticipation"
+    },
+    {
+      "id": "drill_006",
+      "name": "Faceoff Preparation",
+      "category": "faceoff",
+      "skill_tags": ["faceoff", "ground_balls", "strength"],
+      "difficulty": "Beginner",
+      "duration_minutes": 10,
+      "min_players": 2,
+      "optimal_players": 4,
+      "description": "Two FOGOs practice clamping technique, hand positioning, footwork, and the follow-through needed to win ground balls immediately after the clamp.",
+      "coaching_points": [
+        "Proper hand positioning on stick",
+        "Quick feet on whistle",
+        "Low clamping motion",
+        "Explosive leg drive to ground ball",
+        "Control follow-through"
+      ],
+      "setup": "Two FOGOs at X facing each other with stick",
+      "progression": [
+        "Technique breakdown at slow speed",
+        "Half-speed repetitions",
+        "Full-speed clamping",
+        "Compete for ground ball after clamp"
+      ],
+      "format_compatibility": ["standard"],
+      "benefits": "Develops faceoff technique, strength, and ground ball transition"
+    },
+    {
+      "id": "drill_007",
+      "name": "Transition 3v2 Outlet",
+      "category": "transition",
+      "skill_tags": ["transition", "passing", "field_awareness"],
+      "difficulty": "Intermediate",
+      "duration_minutes": 12,
+      "min_players": 5,
+      "optimal_players": 10,
+      "description": "Defensive unit (3 players) breaks out against incoming attackers (2). Emphasizes quick outlet pass and communication.",
+      "coaching_points": [
+        "Secure ground ball first",
+        "Call outlet pass destination",
+        "Lead receiver into sprint",
+        "Support ball carrier immediately",
+        "High tempo transition"
+      ],
+      "setup": "3 defenders with 2 attackers incoming, outlet receivers waiting",
+      "progression": [
+        "No pressure, walk through",
+        "Half-speed transition",
+        "Game speed with 2 attackers",
+        "Add 3rd attacker for 3v3"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Develops transition speed, outlet passing accuracy, and defensive communication"
+    },
+    {
+      "id": "drill_008",
+      "name": "Off-Hand Shooting",
+      "category": "shooting",
+      "skill_tags": ["shooting", "dodging", "ambidexterity"],
+      "difficulty": "Intermediate",
+      "duration_minutes": 10,
+      "min_players": 2,
+      "optimal_players": 6,
+      "description": "Players practice shooting exclusively with their off-hand (non-dominant side) from various distances and angles.",
+      "coaching_points": [
+        "Same fundamental mechanics as strong hand",
+        "Proper foot placement",
+        "Follow through consistency",
+        "Practice accuracy from range",
+        "Build confidence with off-hand"
+      ],
+      "setup": "Shooters line up on off-hand side (left side for right-handed players)",
+      "progression": [
+        "Close range (8-10 yards)",
+        "Medium range (12-15 yards)",
+        "Long range (18+ yards)",
+        "Off-hand dodging into shot"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Develops ambidextrous shooting ability and offensive flexibility"
+    },
+    {
+      "id": "drill_009",
+      "name": "Crease Attack Finish",
+      "category": "shooting",
+      "skill_tags": ["shooting", "dodging", "field_awareness"],
+      "difficulty": "Intermediate",
+      "duration_minutes": 12,
+      "min_players": 3,
+      "optimal_players": 6,
+      "description": "Attackers practice finishing inside crease area with various feeding scenarios: dodge-and-finish, feed from X, feed from sideline.",
+      "coaching_points": [
+        "Quick stick on catches",
+        "Body positioning in crease",
+        "High-low passing options",
+        "Finish before defensive pressure arrives",
+        "Varied release angles"
+      ],
+      "setup": "Feeders at X and wing, attackers inside crease, goalie in goal",
+      "progression": [
+        "Walk-through crease movement",
+        "Half-speed finishing",
+        "Game-speed with defensive pressure",
+        "Add contested shot elements"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Develops crease awareness, quick-stick technique, and high-percentage finishing"
+    },
+    {
+      "id": "drill_010",
+      "name": "Man-Down Defense",
+      "category": "defense",
+      "skill_tags": ["defense", "field_awareness", "communication"],
+      "difficulty": "Advanced",
+      "duration_minutes": 15,
+      "min_players": 8,
+      "optimal_players": 12,
+      "description": "Five defensive players defend against six offensive players (numerical disadvantage). Focus on communication, positioning, and shot pressure.",
+      "coaching_points": [
+        "Verbal communication throughout",
+        "Compact defensive shape",
+        "Pressure weak side",
+        "Prevent easy dodge opportunities",
+        "Force outside shots"
+      ],
+      "setup": "5v6 inside offensive zone with 2 attacks and 4 defenders plus goalie",
+      "progression": [
+        "Slow motion walkthrough",
+        "Half-speed organization",
+        "Game speed man-down",
+        "Rotate defensive positions"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Builds defensive organization, communication, and handling numerical disadvantage"
+    },
+    {
+      "id": "drill_011",
+      "name": "Inside Feed Drill",
+      "category": "passing",
+      "skill_tags": ["passing", "field_awareness", "timing"],
+      "difficulty": "Intermediate",
+      "duration_minutes": 10,
+      "min_players": 4,
+      "optimal_players": 8,
+      "description": "Wing players feed attackers inside crease. Emphasizes accurate feeding angles, leading passes, and timing.",
+      "coaching_points": [
+        "Read defender positioning",
+        "Deliver ball slightly ahead of receiver",
+        "Use high-low feed when heavily marked",
+        "Trust receiver to finish",
+        "Quick feed decision"
+      ],
+      "setup": "Wings at sideline, attackers in crease area, goalie in goal",
+      "progression": [
+        "Stationary feeders, moving attackers",
+        "Feeders moving with ball",
+        "Add defensive pressure on feeders",
+        "Game-speed feeding with defense"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Develops passing accuracy, field awareness, and timing between teammates"
+    },
+    {
+      "id": "drill_012",
+      "name": "Goalie Clear Drill",
+      "category": "goalie",
+      "skill_tags": ["passing", "transition", "goalie"],
+      "difficulty": "Intermediate",
+      "duration_minutes": 10,
+      "min_players": 4,
+      "optimal_players": 8,
+      "description": "Goalie practices clearing balls to designated outlets after save. Develop quick decision-making and accurate long passes.",
+      "coaching_points": [
+        "Quick outlet identification",
+        "Accurate delivery to target",
+        "Proper passing form from crease",
+        "Lead receiver into sprint",
+        "High success rate critical"
+      ],
+      "setup": "Goalie in goal with three outlets positioned at different spots",
+      "progression": [
+        "Stationary outlets",
+        "Outlets moving away from goal",
+        "Defensive pressure on outlets",
+        "Game-speed clear situations"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Improves goalie clearance accuracy, decision-making, and initiation of fast break"
+    },
+    {
+      "id": "drill_013",
+      "name": "Pick-and-Roll Offense",
+      "category": "team_offense",
+      "skill_tags": ["passing", "dodging", "field_awareness"],
+      "difficulty": "Advanced",
+      "duration_minutes": 15,
+      "min_players": 6,
+      "optimal_players": 12,
+      "description": "Offensive players use screen-and-roll concepts to create scoring opportunities. Develops spacing and ball movement.",
+      "coaching_points": [
+        "Proper screen setup (square to defender)",
+        "Roll man reads defense",
+        "Quick pass to open player",
+        "Follow screening action",
+        "Spacing for movement"
+      ],
+      "setup": "Full offensive unit running set plays with screens",
+      "progression": [
+        "Walk-through set plays",
+        "Half-speed execution",
+        "Game-speed with passive defense",
+        "Full-speed with active defense"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Develops team offensive concepts, spacing, and complex ball movement"
+    },
+    {
+      "id": "drill_014",
+      "name": "Save Reaction Drill",
+      "category": "goalie",
+      "skill_tags": ["goalie", "reflexes", "positioning"],
+      "difficulty": "Intermediate",
+      "duration_minutes": 12,
+      "min_players": 3,
+      "optimal_players": 6,
+      "description": "Coaches shoot rapid-fire shots at goalie from various distances and angles to develop reflexes and reaction time.",
+      "coaching_points": [
+        "Proper ready position",
+        "Quick lateral movement",
+        "Stick control around goal",
+        "High-hand saves above head",
+        "Concentration through repetition"
+      ],
+      "setup": "Coach or feeder at wing positions shooting at goalie",
+      "progression": [
+        "Stationary shots from one location",
+        "Multiple angle sequence",
+        "Game-speed rapid fire",
+        "Situational game conditions"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Develops goalie reflexes, reaction time, and handling high-volume shot attempts"
+    },
+    {
+      "id": "drill_015",
+      "name": "Split Dodge Series",
+      "category": "dodging",
+      "skill_tags": ["dodging", "footwork", "field_awareness"],
+      "difficulty": "Intermediate",
+      "duration_minutes": 10,
+      "min_players": 2,
+      "optimal_players": 6,
+      "description": "Players practice split dodge (changing directions sharply) against passive then active defenders, building elusive footwork.",
+      "coaching_points": [
+        "Approach at slight angle",
+        "Explosive stop motion",
+        "Plant and push off laterally",
+        "Protect stick during change",
+        "Accelerate out of dodge"
+      ],
+      "setup": "One-on-one in confined area with defender applying varying pressure",
+      "progression": [
+        "Coach-directed footwork",
+        "Passive defender",
+        "Active defender pressing",
+        "Multiple consecutive dodges"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Develops ability to change direction, create space, and handle pressure"
+    },
+    {
+      "id": "drill_016",
+      "name": "Wing-to-Attack Feed",
+      "category": "passing",
+      "skill_tags": ["passing", "field_awareness", "timing"],
+      "difficulty": "Intermediate",
+      "duration_minutes": 10,
+      "min_players": 4,
+      "optimal_players": 8,
+      "description": "Midfield wings pass to three attackers in organized set, developing feed timing and angle recognition.",
+      "coaching_points": [
+        "Read attack positioning",
+        "Lead attackers into cuts",
+        "Timing on passes",
+        "Angle of approach by wing",
+        "Support after pass"
+      ],
+      "setup": "Wings and attackers positioned in offensive set with goalie",
+      "progression": [
+        "Stationary positioning walkthrough",
+        "Attackers in motion",
+        "Add defensive pressure",
+        "Game-speed feed sequences"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Develops wing-to-attack feeding accuracy and timing in offensive set"
+    },
+    {
+      "id": "drill_017",
+      "name": "Scooping and Securing",
+      "category": "ground_balls",
+      "skill_tags": ["ground_balls", "conditioning", "fundamentals"],
+      "difficulty": "Beginner",
+      "duration_minutes": 8,
+      "min_players": 2,
+      "optimal_players": 6,
+      "description": "Players practice fundamental scooping technique with focus on proper hand positioning, footwork, and ball control.",
+      "coaching_points": [
+        "Low, wide approach",
+        "Hands together on scoop",
+        "Step through ball",
+        "Bring ball to ears quickly",
+        "Cradle while moving"
+      ],
+      "setup": "Loose balls scattered in line, players move through scooping them",
+      "progression": [
+        "Stationary scoops, coach rolls balls",
+        "Walking approach",
+        "Sprint approach",
+        "Scoop and transition pass"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Builds fundamental scooping technique, speed, and ball security"
+    },
+    {
+      "id": "drill_018",
+      "name": "Check and Stick Control",
+      "category": "defense",
+      "skill_tags": ["defense", "stick_control", "positioning"],
+      "difficulty": "Beginner",
+      "duration_minutes": 10,
+      "min_players": 2,
+      "optimal_players": 6,
+      "description": "Defenders practice stick checks with proper form, protecting hands while applying stick pressure to ball carrier.",
+      "coaching_points": [
+        "Keep hands low and behind stick",
+        "Strike bottom of stick first",
+        "Follow through under ball",
+        "Don't over-commit",
+        "Reset quickly"
+      ],
+      "setup": "One-on-one defender versus cradler in confined area",
+      "progression": [
+        "Stationary cradler, practice checks",
+        "Cradler moving slowly",
+        "Cradler moving at game speed",
+        "Live 1v1 advantage defense"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Develops proper stick checking technique and defensive stick control"
+    },
+    {
+      "id": "drill_019",
+      "name": "Midfield Transition Drill",
+      "category": "transition",
+      "skill_tags": ["transition", "field_awareness", "conditioning"],
+      "difficulty": "Intermediate",
+      "duration_minutes": 15,
+      "min_players": 6,
+      "optimal_players": 12,
+      "description": "Midfielders practice transitioning from defense to offense with focus on speed, communication, and maintaining spacing.",
+      "coaching_points": [
+        "Push outlet immediately on possession",
+        "Sprint to offensive zone",
+        "Maintain proper spacing",
+        "Read field for scoring opportunity",
+        "Quick decision-making"
+      ],
+      "setup": "Full midfield group split into transitioning units",
+      "progression": [
+        "Walk-through spacing concepts",
+        "Half-speed transition runs",
+        "Game-speed transitioning",
+        "Add offensive/defensive pressure"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Develops midfield transition speed, spacing awareness, and decision-making"
+    },
+    {
+      "id": "drill_020",
+      "name": "Goalie 1v1 Advantage",
+      "category": "goalie",
+      "skill_tags": ["goalie", "defense", "positioning"],
+      "difficulty": "Advanced",
+      "duration_minutes": 12,
+      "min_players": 3,
+      "optimal_players": 6,
+      "description": "Goalie leaves crease to play 1v1 against one-on-one situation, developing confidence and positioning outside crease.",
+      "coaching_points": [
+        "Early positioning",
+        "Cut down angles",
+        "Hands-ready position",
+        "Don't commit too early",
+        "Recovery to crease"
+      ],
+      "setup": "One-on-one attacker versus goalie with no crease restrictions",
+      "progression": [
+        "Slow-speed approach",
+        "Game-speed situations",
+        "Multiple consecutive one-on-ones",
+        "Crease plus one-on-one"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Builds goalie confidence, positioning, and ability to handle one-on-one situations"
+    },
+    {
+      "id": "drill_021",
+      "name": "Ground Ball Outs with Pressure",
+      "category": "ground_balls",
+      "skill_tags": ["ground_balls", "transition", "conditioning"],
+      "difficulty": "Intermediate",
+      "duration_minutes": 12,
+      "min_players": 4,
+      "optimal_players": 8,
+      "description": "Players compete for ground balls rolled out with active defenders pursuing, simulating game-speed ground ball situations.",
+      "coaching_points": [
+        "Quick scoop under pressure",
+        "Immediate acceleration away",
+        "Protect ball with body",
+        "Outlet awareness",
+        "Secure before passing"
+      ],
+      "setup": "Ground balls rolled out with multiple competitors",
+      "progression": [
+        "Passive pursuit only",
+        "Active defender full-speed",
+        "Multiple ground balls in play",
+        "Live advantage/disadvantage"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Develops ground ball wins under pressure and transition speed"
+    },
+    {
+      "id": "drill_022",
+      "name": "Offensive Shape Drill",
+      "category": "team_offense",
+      "skill_tags": ["field_awareness", "spacing", "passing"],
+      "difficulty": "Intermediate",
+      "duration_minutes": 12,
+      "min_players": 6,
+      "optimal_players": 12,
+      "description": "Full offensive unit practices maintaining proper spacing and shape while moving the ball without live defenders.",
+      "coaching_points": [
+        "Proper spacing angles",
+        "Movement with ball",
+        "Support positioning",
+        "Quick ball movement",
+        "Shape preservation"
+      ],
+      "setup": "Offensive unit in organized set moving ball according to pattern",
+      "progression": [
+        "Walk-through spacing",
+        "Half-speed ball movement",
+        "Game-speed movement",
+        "Add passive then active defense"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Develops offensive understanding of spacing, movement, and ball distribution"
+    },
+    {
+      "id": "drill_023",
+      "name": "Defensive Slide",
+      "category": "defense",
+      "skill_tags": ["defense", "footwork", "positioning"],
+      "difficulty": "Beginner",
+      "duration_minutes": 8,
+      "min_players": 2,
+      "optimal_players": 6,
+      "description": "Defenders practice lateral sliding movement to stay in front of moving ball carrier without crossing feet.",
+      "coaching_points": [
+        "Keep feet shoulder-width apart",
+        "Lateral shuffle (no crossing)",
+        "Maintain ready position",
+        "Eyes on ball and opponent",
+        "Stay low throughout"
+      ],
+      "setup": "Partner moving along line, defender maintains distance with slides",
+      "progression": [
+        "Stationary movement at slow speed",
+        "Increasing speed sliding",
+        "Add direction changes",
+        "Live 1v1 with slide emphasis"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Builds fundamental defensive footwork and lateral movement"
+    },
+    {
+      "id": "drill_024",
+      "name": "X-Attack Drill",
+      "category": "team_offense",
+      "skill_tags": ["passing", "shooting", "field_awareness"],
+      "difficulty": "Intermediate",
+      "duration_minutes": 12,
+      "min_players": 4,
+      "optimal_players": 8,
+      "description": "Attack player at X position receives various feeds and finishes, simulating feeding from wings and midfielders.",
+      "coaching_points": [
+        "Proper X positioning",
+        "Reading passing options",
+        "Quick stick on feed",
+        "Decisive finishing",
+        "Setup awareness"
+      ],
+      "setup": "Attack at X with feeders at wing and top positions",
+      "progression": [
+        "Stationary feeds, setup movement",
+        "Moving attack position",
+        "Add passive defense",
+        "Game-speed with active defense"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Develops X positioning, feed recognition, and finishing ability"
+    },
+    {
+      "id": "drill_025",
+      "name": "Conditioning and Transition",
+      "category": "conditioning",
+      "skill_tags": ["transition", "conditioning", "field_awareness"],
+      "difficulty": "Advanced",
+      "duration_minutes": 15,
+      "min_players": 6,
+      "optimal_players": 12,
+      "description": "High-intensity drill combining conditioning with game-speed transitions, simulating quarters with minimal rest.",
+      "coaching_points": [
+        "Maintain speed throughout",
+        "Transition speed critical",
+        "Communication in transition",
+        "Effort intensity consistent",
+        "Support positioning maintained"
+      ],
+      "setup": "Continuous transitions with short rest periods",
+      "progression": [
+        "Shorter intervals with rest",
+        "Extended intervals minimal rest",
+        "Full-game conditions",
+        "Back-to-back transitions"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Builds cardiovascular conditioning and maintains game speed when fatigued"
+    },
+    {
+      "id": "drill_026",
+      "name": "Face-Off Clamp Technique",
+      "category": "faceoff",
+      "skill_tags": ["faceoff", "strength", "technique"],
+      "difficulty": "Beginner",
+      "duration_minutes": 10,
+      "min_players": 2,
+      "optimal_players": 4,
+      "description": "FOGOs practice pure clamping technique and stick control at X without competition, focusing on proper mechanics.",
+      "coaching_points": [
+        "Proper hand placement",
+        "Stick angle correct",
+        "Explosive motion on whistle",
+        "Control follow-through",
+        "Footwork timing"
+      ],
+      "setup": "Two FOGOs at X with coach directing motion",
+      "progression": [
+        "Slow-motion mechanics",
+        "Half-speed repetitions",
+        "Full-speed clamping",
+        "Clamp to ground ball pursuit"
+      ],
+      "format_compatibility": ["standard"],
+      "benefits": "Develops proper faceoff technique and muscle memory"
+    },
+    {
+      "id": "drill_027",
+      "name": "One-on-One Attack vs Defense",
+      "category": "defense",
+      "skill_tags": ["defense", "dodging", "1v1"],
+      "difficulty": "Intermediate",
+      "duration_minutes": 12,
+      "min_players": 3,
+      "optimal_players": 8,
+      "description": "Live one-on-one competition inside offensive zone, developing defensive and offensive 1v1 skills against full resistance.",
+      "coaching_points": [
+        "Proper defensive positioning",
+        "Dodge away from pressure",
+        "Finish offensive opportunity",
+        "Check placement on defense",
+        "Composure under pressure"
+      ],
+      "setup": "Small field area for confined 1v1 play",
+      "progression": [
+        "Passive defender",
+        "Active defender advantage",
+        "Equal competition",
+        "Full-game intensity"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Develops 1v1 skills, competitiveness, and decision-making under pressure"
+    },
+    {
+      "id": "drill_028",
+      "name": "Zone Defensive Principles",
+      "category": "team_defense",
+      "skill_tags": ["defense", "field_awareness", "communication"],
+      "difficulty": "Advanced",
+      "duration_minutes": 15,
+      "min_players": 6,
+      "optimal_players": 12,
+      "description": "Defensive unit practices zone defense concepts - defending areas rather than players, with proper rotation and communication.",
+      "coaching_points": [
+        "Defend assigned area",
+        "Proper zone rotation",
+        "Communication constant",
+        "Prevent inside shots",
+        "Force outside shots"
+      ],
+      "setup": "Full defensive unit against offensive set in zone formation",
+      "progression": [
+        "Walk-through zone rotations",
+        "Half-speed against static offense",
+        "Game-speed against moving offense",
+        "Game conditions full pressure"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Develops zone understanding, communication, and team defensive principles"
+    },
+    {
+      "id": "drill_029",
+      "name": "Cradle and Protect",
+      "category": "fundamentals",
+      "skill_tags": ["passing", "ball_security", "conditioning"],
+      "difficulty": "Beginner",
+      "duration_minutes": 8,
+      "min_players": 2,
+      "optimal_players": 6,
+      "description": "Players practice proper cradling technique and ball protection against pressure, developing fundamental ball control.",
+      "coaching_points": [
+        "Proper hand placement",
+        "Wrist flick motion",
+        "Protect stick with body",
+        "Ball stays secure",
+        "Cradle while moving"
+      ],
+      "setup": "Pairs with one player cradling against passive pressure",
+      "progression": [
+        "Stationary cradling",
+        "Cradling while moving",
+        "Passive defensive pressure",
+        "Active defensive pressure"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Builds fundamental ball control and protection under pressure"
+    },
+    {
+      "id": "drill_030",
+      "name": "Fast Break Sequence",
+      "category": "transition",
+      "skill_tags": ["transition", "passing", "shooting"],
+      "difficulty": "Intermediate",
+      "duration_minutes": 15,
+      "min_players": 6,
+      "optimal_players": 12,
+      "description": "Players execute fast break opportunities from defensive possession to shot, emphasizing speed, spacing, and finishing.",
+      "coaching_points": [
+        "Outlet pass immediately",
+        "Sprint to offensive zone",
+        "Proper fast break spacing",
+        "Quick ball movement",
+        "High-percentage finish"
+      ],
+      "setup": "Defensive possession triggers fast break to offensive end",
+      "progression": [
+        "Three-on-two fast break",
+        "Three-on-one fast break",
+        "Game-speed with pursuit",
+        "Consecutive fast breaks"
+      ],
+      "format_compatibility": ["standard", "6s"],
+      "benefits": "Develops fast break execution, transition speed, and finishing ability"
+    }
+  ],
+  "drill_metadata": {
+    "total_drills": 30,
+    "categories": {
+      "passing": 4,
+      "shooting": 4,
+      "ground_balls": 3,
+      "defense": 5,
+      "dodging": 2,
+      "faceoff": 3,
+      "transition": 4,
+      "team_offense": 3,
+      "team_defense": 2,
+      "goalie": 4,
+      "conditioning": 1,
+      "fundamentals": 1
+    },
+    "difficulty_distribution": {
+      "Beginner": 8,
+      "Intermediate": 18,
+      "Advanced": 4
+    },
+    "format_compatibility": {
+      "standard_only": 1,
+      "both_standard_and_6s": 29
+    }
+  },
+  "organization_guide": {
+    "skill_progression": "Drills progress from fundamental techniques (Scooping and Securing, Cradle and Protect) to game situations (Fast Break, Zone Defense)",
+    "by_position": {
+      "Attack": ["Crease Attack Finish", "Inside Feed Drill", "X-Attack Drill", "Off-Hand Shooting"],
+      "Midfield": ["3-Man Weave", "Transition 3v2 Outlet", "Midfield Transition Drill", "Pick-and-Roll Offense"],
+      "Defense": ["Defensive Positioning Drill", "Check and Stick Control", "Defensive Slide", "Man-Down Defense", "Zone Defensive Principles"],
+      "Goalie": ["Goalie Clear Drill", "Save Reaction Drill", "Goalie 1v1 Advantage"],
+      "FOGO": ["Faceoff Preparation", "Face-Off Clamp Technique"]
+    },
+    "practice_structure": {
+      "warm_up": ["Cradle and Protect", "Scooping and Securing"],
+      "skill_development": ["Dodging Gates", "Quick Stick Shooting", "Defensive Positioning Drill"],
+      "transition_and_conditioning": ["Ground Ball Outs", "Conditioning and Transition"],
+      "team_concepts": ["Pick-and-Roll Offense", "Offensive Shape Drill", "Zone Defensive Principles"],
+      "game_simulation": ["One-on-One Attack vs Defense", "Fast Break Sequence", "Man-Down Defense"]
+    }
+  }
+}

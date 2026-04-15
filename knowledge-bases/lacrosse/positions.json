@@ -1,0 +1,271 @@
+{
+  "positions": {
+    "Attack": {
+      "description": "Primary offensive player responsible for scoring and offensive execution from the offensive end of the field",
+      "key_skills": {
+        "shooting": 0.25,
+        "dodging": 0.20,
+        "passing": 0.15,
+        "field_awareness": 0.15,
+        "ground_balls": 0.10,
+        "transition": 0.10,
+        "defense": 0.04,
+        "faceoff": 0.01
+      },
+      "ideal_profile": {
+        "shooting": 9,
+        "dodging": 8,
+        "passing": 7,
+        "field_awareness": 7,
+        "ground_balls": 5,
+        "transition": 6,
+        "defense": 3,
+        "faceoff": 1
+      },
+      "traits": [
+        "Quick release",
+        "Strong off-hand",
+        "Feeds from X position",
+        "Finishes both inside and outside",
+        "Confident with ball in hand",
+        "High field IQ",
+        "Creative dodges"
+      ],
+      "ncaa_d3_benchmark": {
+        "goals_per_game": 1.8,
+        "assists_per_game": 1.2,
+        "shots_per_game": 4.5,
+        "ground_balls_per_game": 1.0,
+        "shooting_percentage": 0.40
+      },
+      "position_focus": "Offensive execution, shot placement, creating for teammates from X and top of offense"
+    },
+    "Midfield": {
+      "description": "Hybrid position playing both offense and defense; must have endurance, versatility, and all-around skills",
+      "key_skills": {
+        "transition": 0.20,
+        "field_awareness": 0.18,
+        "passing": 0.15,
+        "ground_balls": 0.15,
+        "dodging": 0.12,
+        "shooting": 0.10,
+        "defense": 0.08,
+        "faceoff": 0.02
+      },
+      "ideal_profile": {
+        "shooting": 7,
+        "dodging": 7,
+        "passing": 8,
+        "field_awareness": 8,
+        "ground_balls": 7,
+        "transition": 8,
+        "defense": 6,
+        "faceoff": 2
+      },
+      "traits": [
+        "Exceptional endurance",
+        "Two-way player",
+        "Ball security in transition",
+        "Smart defensive positioning",
+        "Reliable ground ball competitor",
+        "Versatile in formations",
+        "High football IQ"
+      ],
+      "ncaa_d3_benchmark": {
+        "goals_per_game": 0.8,
+        "assists_per_game": 1.0,
+        "shots_per_game": 2.0,
+        "ground_balls_per_game": 4.5,
+        "defensive_positioning_rating": 7.5
+      },
+      "position_focus": "Transition play, two-way contributions, ground ball production, field control"
+    },
+    "Defense": {
+      "description": "Dedicated defensive player responsible for shutting down attackers and protecting the crease area",
+      "key_skills": {
+        "field_awareness": 0.20,
+        "defense": 0.25,
+        "ground_balls": 0.18,
+        "transition": 0.12,
+        "passing": 0.10,
+        "dodging": 0.08,
+        "shooting": 0.05,
+        "faceoff": 0.02
+      },
+      "ideal_profile": {
+        "shooting": 4,
+        "dodging": 5,
+        "passing": 6,
+        "field_awareness": 9,
+        "ground_balls": 8,
+        "transition": 6,
+        "defense": 9,
+        "faceoff": 2
+      },
+      "traits": [
+        "Physical presence",
+        "Exceptional body positioning",
+        "Smart stick checks",
+        "Communicator",
+        "Crease awareness",
+        "Reliable outlet passer",
+        "High-IQ defender"
+      ],
+      "ncaa_d3_benchmark": {
+        "ground_balls_per_game": 5.5,
+        "assisted_caused_turnovers_per_game": 2.0,
+        "defensive_rating": 8.0,
+        "caused_turnovers_per_game": 1.5,
+        "clears_per_game": 3.0
+      },
+      "position_focus": "One-on-one defense, crease protection, ground ball production, transition outlets"
+    },
+    "Goalie": {
+      "description": "Goalkeeper responsible for defending the goal, directing defense, and initiating clears",
+      "key_skills": {
+        "defense": 0.30,
+        "field_awareness": 0.25,
+        "passing": 0.15,
+        "transition": 0.10,
+        "ground_balls": 0.10,
+        "dodging": 0.05,
+        "shooting": 0.03,
+        "faceoff": 0.02
+      },
+      "ideal_profile": {
+        "shooting": 2,
+        "dodging": 3,
+        "passing": 7,
+        "field_awareness": 9,
+        "ground_balls": 7,
+        "transition": 6,
+        "defense": 10,
+        "faceoff": 1
+      },
+      "traits": [
+        "Exceptional hand-eye coordination",
+        "Vocal leader",
+        "Confident positioning",
+        "Quick reflexes",
+        "Accurate long ball",
+        "Unafraid of ground balls",
+        "Peak athleticism"
+      ],
+      "ncaa_d3_benchmark": {
+        "save_percentage": 0.55,
+        "goals_against_per_game": 10.5,
+        "caused_turnovers_per_game": 1.0,
+        "clear_success_rate": 0.75,
+        "ground_balls_per_game": 1.5
+      },
+      "position_focus": "Goal defense, save percentage, directing defense, clear execution, handling pressure"
+    },
+    "FOGO": {
+      "description": "Face-Off Specialist (FOGO) - dedicated faceoff player who exits the field after possession secured",
+      "key_skills": {
+        "faceoff": 0.35,
+        "ground_balls": 0.20,
+        "transition": 0.15,
+        "field_awareness": 0.10,
+        "passing": 0.10,
+        "dodging": 0.05,
+        "shooting": 0.03,
+        "defense": 0.02
+      },
+      "ideal_profile": {
+        "shooting": 3,
+        "dodging": 5,
+        "passing": 5,
+        "field_awareness": 6,
+        "ground_balls": 8,
+        "transition": 6,
+        "defense": 3,
+        "faceoff": 10
+      },
+      "traits": [
+        "Dominant at the X",
+        "Explosive lower body",
+        "Strong hands",
+        "Quick get-off",
+        "Effective follow-through",
+        "Competitive mentality",
+        "Reliable ground ball threat"
+      ],
+      "ncaa_d3_benchmark": {
+        "faceoff_win_percentage": 0.52,
+        "ground_balls_per_game": 6.0,
+        "transition_possessions_won": 3.5,
+        "turnovers_per_game": 1.2,
+        "goals_per_game": 0.3
+      },
+      "position_focus": "Faceoff success, ground ball conversion, quick transitions, possession battle dominance"
+    }
+  },
+  "6s_adjustments": {
+    "description": "In 6s (sixes) lacrosse, position roles shift significantly due to smaller field, faster tempo, and absence of faceoffs",
+    "format": "6s",
+    "key_changes": [
+      "No FOGO role - possession alternates after goals",
+      "Shooting frequency increases dramatically",
+      "1v1 dodging becomes premium skill",
+      "Transition speed is critical to pace of play",
+      "All field players must be capable scorers",
+      "Defense becomes more man-to-man intensive",
+      "Ground balls less common due to faster pace"
+    ],
+    "weight_modifiers": {
+      "Attack": {
+        "shooting": 0.30,
+        "dodging": 0.25,
+        "passing": 0.15,
+        "field_awareness": 0.15,
+        "transition": 0.10,
+        "ground_balls": 0.03,
+        "defense": 0.02,
+        "faceoff": 0.00
+      },
+      "Midfield": {
+        "transition": 0.25,
+        "shooting": 0.20,
+        "field_awareness": 0.18,
+        "dodging": 0.15,
+        "passing": 0.12,
+        "ground_balls": 0.08,
+        "defense": 0.02,
+        "faceoff": 0.00
+      },
+      "Defense": {
+        "defense": 0.30,
+        "field_awareness": 0.25,
+        "dodging": 0.15,
+        "transition": 0.12,
+        "passing": 0.10,
+        "ground_balls": 0.05,
+        "shooting": 0.02,
+        "faceoff": 0.00
+      },
+      "Goalie": {
+        "defense": 0.35,
+        "field_awareness": 0.30,
+        "passing": 0.20,
+        "ground_balls": 0.10,
+        "transition": 0.05,
+        "dodging": 0.00,
+        "shooting": 0.00,
+        "faceoff": 0.00
+      }
+    },
+    "position_elimination": "FOGO",
+    "notes": "In 6s, athletes must be more versatile and capable across shooting, dodging, and transition. Field size (70x36 yards) demands quick decision-making and high ball movement. All players should develop scoring ability."
+  },
+  "skill_definitions": {
+    "shooting": "Ability to score from various distances and angles; includes release speed, accuracy, and footwork",
+    "dodging": "1v1 ball-handling ability to create space and evade defenders using footwork and stick handling",
+    "passing": "Accuracy and timing of passes; includes both feed passes and transition outlet passes",
+    "field_awareness": "Understanding of field positioning, spacing, and defensive gaps; anticipation of plays",
+    "ground_balls": "Ability to win loose balls, scoop, and secure possession in transition moments",
+    "transition": "Speed of converting defense-to-offense; moving the ball quickly up-field",
+    "defense": "One-on-one defending, positioning, stick checks, and overall defensive fundamentals",
+    "faceoff": "Dominance at the X; winning possessions and controlling ground balls immediately after faceoff"
+  }
+}

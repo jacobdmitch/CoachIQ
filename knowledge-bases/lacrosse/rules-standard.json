@@ -1,0 +1,206 @@
+{
+  "format": "standard",
+  "display_name": "Standard Field Lacrosse (Men's College)",
+  "description": "11-a-side field lacrosse played on a 110x60 yard field across 4 12-minute quarters",
+  "players": {
+    "field_players": 10,
+    "goalie": 1,
+    "total_on_field": 11,
+    "roster_max": 30,
+    "position_breakdown": {
+      "Attack": 3,
+      "Midfield": 3,
+      "Defense": 3,
+      "Goalie": 1,
+      "FOGO": 1
+    }
+  },
+  "periods": {
+    "count": 4,
+    "length_minutes": 12,
+    "clock_stops": "Last 2 minutes of each quarter on all dead balls",
+    "halftime_minutes": 10,
+    "quarters": [
+      {
+        "number": 1,
+        "name": "First Quarter",
+        "length_minutes": 12
+      },
+      {
+        "number": 2,
+        "name": "Second Quarter",
+        "length_minutes": 12
+      },
+      {
+        "number": 3,
+        "name": "Third Quarter",
+        "length_minutes": 12
+      },
+      {
+        "number": 4,
+        "name": "Fourth Quarter",
+        "length_minutes": 12
+      }
+    ],
+    "overtime": {
+      "enabled": true,
+      "format": "sudden death",
+      "period_length_minutes": 4,
+      "max_periods": 2,
+      "clock_rules": "Continuous clock until timeout with 2 minutes remaining"
+    }
+  },
+  "substitutions": {
+    "type": "horn",
+    "rules": "Substitutions through the substitution area on the fly or during dead ball situations",
+    "specific_rules": [
+      "Players must enter through the designated substitution area",
+      "Can substitute during live play or dead ball",
+      "No time limit on individual substitutions",
+      "Midfielders frequently rotate due to 4-minute line demands"
+    ],
+    "penalty_for_illegal_sub": {
+      "type": "technical_foul",
+      "duration_seconds": 30,
+      "description": "Too many men on field"
+    }
+  },
+  "faceoffs": {
+    "occurs": "Start of each quarter and after each goal",
+    "location": "Center X (midfield)",
+    "participants": "FOGO or designated midfielder from each team",
+    "positions": "Standing back-to-back at X",
+    "rules": [
+      "Players clamp on whistle",
+      "One step back rule before ground ball is free",
+      "Non-faceoff players must stay 5 yards from X",
+      "Clamp violations result in possession to opposing team"
+    ],
+    "possession_after_goal": "Losing team starts with faceoff"
+  },
+  "penalties": {
+    "personal_foul": {
+      "duration_seconds": 60,
+      "releasable": false,
+      "description": "Released when opposing team scores or time expires",
+      "examples": [
+        "Illegal body check",
+        "Slashing",
+        "Rough play",
+        "Hitting with stick",
+        "Unnecessary roughness"
+      ]
+    },
+    "technical_foul": {
+      "duration_seconds": 30,
+      "releasable": true,
+      "description": "Released when opposing team gains possession",
+      "examples": [
+        "Illegal procedure",
+        "Crease violation",
+        "Illegal field substitution",
+        "Warding off",
+        "Stalling"
+      ]
+    },
+    "expulsion_foul": {
+      "duration_seconds": null,
+      "description": "Player ejected from game for serious infractions",
+      "examples": [
+        "Flagrant unsportsmanlike conduct",
+        "Second unsportsmanlike conduct",
+        "Dangerous play resulting in injury"
+      ]
+    }
+  },
+  "field": {
+    "length_yards": 110,
+    "width_yards": 60,
+    "end_line_to_goal": 10,
+    "crease": {
+      "shape": "circle",
+      "radius_yards": 3,
+      "description": "Area around goal where only goalie can be, violation results in goal cancellation"
+    },
+    "substitution_area": {
+      "location": "Mid-field sideline, near bench",
+      "length_yards": 20,
+      "description": "Area where players must enter and exit field"
+    },
+    "key_lines": [
+      "End line (goal line)",
+      "Side line",
+      "Center line (midfield)",
+      "Crease line (3-yard circle)",
+      "Restraining line (20 yards from goal)"
+    ]
+  },
+  "ball_possession": {
+    "start": "Faceoff at center X",
+    "out_of_bounds": {
+      "rule": "Possession goes to nearest opposing player",
+      "exception": "Attacking team caused it to go out - defending team possession"
+    },
+    "ground_balls": "Fastest player controls possession",
+    "loose_ball": "60-second stall count on all shots"
+  },
+  "scoring": {
+    "goal": {
+      "points": 1,
+      "description": "Ball completely enters goal below goal line"
+    },
+    "winning": "Team with most goals after 4 quarters wins"
+  },
+  "crease_rules": {
+    "violations": [
+      "Non-goalie in crease during live play",
+      "Goal cancelled if offensive player in crease when goal scored",
+      "Defensive player in crease is 1-yard foul"
+    ],
+    "goalie_privileges": [
+      "Only goalie can move freely in crease",
+      "Can throw ball out to clear",
+      "Protected from high elbows above shoulders"
+    ]
+  },
+  "clears": {
+    "definition": "Moving ball from defensive end to midfield",
+    "time_limit": "20 seconds to move ball past midfield line",
+    "violation": "Stalling - 30-second technical foul"
+  },
+  "stall_count": {
+    "description": "Keeps game moving at proper pace",
+    "duration_seconds": 60,
+    "restarts": "After each made goal",
+    "violation": "Failure to shoot within stall count results in loss of possession"
+  },
+  "shot_clock": "None (only 60-second stall count)",
+  "advanced_rules": {
+    "illegal_procedure": [
+      "Playing with illegal stick",
+      "Playing with illegal gloves",
+      "More than 3 long sticks on field at once"
+    ],
+    "equipment": {
+      "stick_length": {
+        "field_players": "40-42 inches",
+        "goalie": "40-72 inches"
+      },
+      "pocket_depth": "Measured with ball sitting in pocket; cannot exceed certain depth",
+      "gloves": "Must be high quality leather or synthetic with proper padding"
+    }
+  },
+  "timeouts": {
+    "regulation": {
+      "per_team_per_half": 2,
+      "duration_seconds": 60,
+      "timing": "Can call during live play or dead ball"
+    },
+    "usage": "Strategic; often called before critical possessions or after opposition score"
+  },
+  "restraining_line": {
+    "location": "20 yards from goal line",
+    "description": "Line used for restarts and certain penalty situations",
+    "significance": "Important for clearing violations and technical fouls"
+  }
+}

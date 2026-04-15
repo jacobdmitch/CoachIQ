@@ -1,0 +1,185 @@
+{
+  "format": "6s",
+  "display_name": "Sixes Lacrosse (6v6)",
+  "description": "Fast-paced, 6-a-side lacrosse format played on smaller field with shot clock, no faceoffs, and free substitution",
+  "players": {
+    "field_players": 5,
+    "goalie": 1,
+    "total_on_field": 6,
+    "roster_max": 12,
+    "typical_rotation": 8,
+    "position_breakdown": {
+      "Attack": 1,
+      "Midfield": 2,
+      "Defense": 2,
+      "Goalie": 1,
+      "FOGO": 0
+    }
+  },
+  "periods": {
+    "count": 2,
+    "length_minutes": 12,
+    "total_game_time_minutes": 24,
+    "clock_rules": "Continuous running clock",
+    "halftime_minutes": 5,
+    "timeouts_per_team": 2,
+    "timeout_duration_seconds": 60
+  },
+  "shot_clock": {
+    "default_seconds": 60,
+    "configurable": true,
+    "common_variants": [45, 60, 75],
+    "resets_on": [
+      "Defensive possession change",
+      "Goal",
+      "Out of bounds",
+      "Each new possession"
+    ],
+    "violation": "Stalling - turnover to opposing team"
+  },
+  "substitutions": {
+    "type": "free_movement",
+    "rules": [
+      "Players can enter and exit freely through substitution line",
+      "Substitutions allowed during live play",
+      "No time limit between substitutions",
+      "Higher substitution frequency expected due to pace"
+    ],
+    "notes": "Teams typically rotate every 4-5 possessions or ~3 minutes to manage fatigue",
+    "unlimited": true
+  },
+  "faceoffs": {
+    "occurs": "Never",
+    "notes": "Possession alternates after goals",
+    "team_rotation": "Team that scored gains possession for next goal; losing team starts next possession after goal",
+    "game_start": "Alternating possession arrows used; home team typically starts with ball"
+  },
+  "possession_arrows": {
+    "description": "Alternating possession rule replaces faceoffs",
+    "implementation": "Arrow on scorer's table points to team with next possession after goal",
+    "start_of_game": "Home team typically starts with possession"
+  },
+  "field": {
+    "length_yards": 70,
+    "width_yards": 36,
+    "end_line_to_goal": 10,
+    "crease": {
+      "shape": "circle",
+      "radius_yards": 3,
+      "description": "Area around goal where only goalie allowed"
+    },
+    "substitution_area": {
+      "location": "Mid-field sideline",
+      "length_yards": 20,
+      "description": "Area where players enter/exit field"
+    },
+    "field_comparison_to_standard": {
+      "length_reduction_percent": 36,
+      "width_reduction_percent": 40,
+      "area_reduction_percent": 60
+    }
+  },
+  "ball_possession": {
+    "start": "Alternating arrow possession",
+    "out_of_bounds": {
+      "rule": "Nearest opposing player gains possession",
+      "exception": "Attacking team caused it - defending team possession"
+    },
+    "ground_balls": "Fastest player controls; critical in small-field game",
+    "loose_ball": "Immediate play continues"
+  },
+  "scoring": {
+    "goal": {
+      "points": 1,
+      "description": "Ball completely enters goal below goal line"
+    },
+    "winning": "Team with most goals after 2 periods wins"
+  },
+  "penalties": {
+    "personal_foul": {
+      "duration_seconds": 60,
+      "releasable": false,
+      "examples": [
+        "Illegal body check",
+        "Slashing",
+        "Dangerous play",
+        "Excessive contact"
+      ]
+    },
+    "technical_foul": {
+      "duration_seconds": 30,
+      "releasable": true,
+      "examples": [
+        "Illegal procedure",
+        "Crease violation",
+        "Warding off"
+      ]
+    },
+    "expulsion_foul": {
+      "description": "Ejection from game for flagrant infractions"
+    }
+  },
+  "crease_rules": {
+    "violations": [
+      "Non-goalie in crease during live play",
+      "Goal cancelled if offensive player in crease when goal scored",
+      "Defensive player in crease is 1-yard foul"
+    ],
+    "goalie_privileges": [
+      "Only goalie can move freely in crease",
+      "Can throw ball out to clear",
+      "Protected from high elbows"
+    ]
+  },
+  "clearing": {
+    "definition": "Moving ball from defensive end past midfield",
+    "time_limit": "None (shot clock governs pace)",
+    "emphasis": "Less emphasis than standard due to shot clock pressure"
+  },
+  "key_differences_from_standard": [
+    "No faceoffs - possession alternates",
+    "Shot clock (default 60s, configurable 45-75s)",
+    "Smaller field (70x36 yards) emphasizes 1v1 skills and spacing",
+    "Free substitution rules enable higher tempo",
+    "Higher shooting frequency and possessions per game",
+    "5 field players + 1 goalie (vs 10+1 in standard)",
+    "No FOGO position or role",
+    "2 halves vs 4 quarters",
+    "Faster game flow and continuous substitution"
+  ],
+  "style_of_play": [
+    "High-tempo, transition-focused",
+    "Emphasis on individual skill (1v1 shooting, dodging)",
+    "Quick decision-making required",
+    "All players must be capable scorers",
+    "Defensive intensity in small spaces",
+    "Quick outlet passes critical",
+    "More balanced attacking/defending from all players"
+  ],
+  "strategic_considerations": {
+    "spacing": "Tight field requires careful spacing and movement",
+    "transition": "Speed of transition is competitive advantage",
+    "conditioning": "Athletes fatigue quickly; frequent substitution essential",
+    "positioning": "One defensive mistake results in goal-scoring opportunity",
+    "shooting": "Lower defensive pressure allows more outside shots"
+  },
+  "equipment": {
+    "stick_length": {
+      "field_players": "40-42 inches",
+      "goalie": "40-72 inches"
+    },
+    "same_as_standard": true,
+    "pocket_rules": "Same as standard field lacrosse"
+  },
+  "overtime": {
+    "format": "Sudden death, first team to score wins",
+    "period_length_minutes": 4,
+    "max_periods": 2
+  },
+  "coaching_notes": {
+    "pace_management": "Shot clock forces aggressive play; coaches must manage clock",
+    "player_development": "Excellent format for developing young players' decision-making",
+    "conditioning": "Requires excellent conditioning; frequent substitution recommended",
+    "skill_emphasis": "Develops shooting, 1v1 dodging, field awareness at accelerated rate"
+  }
+}
