@@ -1,4 +1,4 @@
-import { pool } from './database.js';
+import { query as pool } from './database.js';
 import logger from './logger.js';
 
 /**
