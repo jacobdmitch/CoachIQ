@@ -41,7 +41,14 @@ const io = new SocketIOServer(server, {
 
 // Middleware
 app.set('trust proxy', 1);
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      'img-src': ["'self'", 'data:', 'https://*.amazonaws.com'],
+    },
+  },
+}));
 app.use(
   cors({
     origin: process.env.CORS_ORIGIN || 'https://coachiq.onrender.com',

@@ -73,6 +73,7 @@ async function s3Upload(buffer, filename, contentType) {
     Key: key,
     Body: buffer,
     ContentType: contentType,
+    CacheControl: 'public, max-age=31536000',
   }));
 
   const publicBase = process.env.S3_PUBLIC_URL
