@@ -32,7 +32,7 @@ router.post(
     // Fetch roster
     const rosterResult = await query(
       'SELECT * FROM athletes WHERE team_id = $1',
-      [game.home_team_id]
+      [game.team_id]
     );
     const athletes = rosterResult.rows;
 
@@ -360,10 +360,9 @@ router.post(
     // Persist final state to database
     await query(
       `UPDATE games SET
-        home_score = $1,
-        away_score = $2,
-        status = 'completed',
-        ended_at = NOW()
+        score_home = $1,
+        score_away = $2,
+        status = 'completed'
       WHERE id = $3`,
       [gameState.homeScore, gameState.awayScore, gameId]
     );

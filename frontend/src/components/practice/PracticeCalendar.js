@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../config/api.js';
+import { useAuth } from '../../context/AuthContext.js';
 import PracticeBuilder from './PracticeBuilder.js';
 import PracticeAnalysis from './PracticeAnalysis.js';
 
-const PracticeCalendar = ({ teamId }) => {
+const PracticeCalendar = () => {
+  const { team } = useAuth();
+  const teamId = team?.id;
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -14,7 +17,10 @@ const PracticeCalendar = ({ teamId }) => {
 
   // Load practice sessions
   useEffect(() => {
-    if (!teamId) return;
+    if (!teamId) {
+      setLoading(false);
+      return;
+    }
 
     const loadSessions = async () => {
       setLoading(true);

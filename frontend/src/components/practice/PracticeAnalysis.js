@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../config/api.js';
-import DrillCard from './DrillCard.js';
 
 const PracticeAnalysis = ({ teamId, onCreatePractice }) => {
   const [analysis, setAnalysis] = useState(null);

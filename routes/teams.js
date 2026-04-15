@@ -3,7 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
-import { query as pool } from '../services/database.js';
+import { query as dbQuery } from '../services/database.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -50,7 +50,7 @@ const upload = multer({
 // ─── Helper: verify coach owns the team ─────────────────────────────────────
 
 async function requireTeamOwner(coachId, teamId) {
-  const { rows } = await pool.query(
+  const { rows } = await dbQuery(
     'SELECT id FROM teams WHERE id = $1 AND coach_id = $2',
     [teamId, coachId]
   );
@@ -64,13 +64,13 @@ async function requireTeamOwner(coachId, teamId) {
 // ─── GET /api/teams — list all teams for the authenticated coach ─────────────
 
 router.get('/', async (req, res) => {
-  const { rows } = await pool.query(
+  const { rows } = await dbQuery(
     `SELECT id, team_name, season, sport_type, game_format,
             logo_url, primary_color, created_at
        FROM teams
       WHERE coach_id = $1
       ORDER BY created_at DESC`,
-    [req.coach.id]
+    [req.coachId]
   );
   res.json({ success: true, teams: rows });
 });
@@ -78,12 +78,12 @@ router.get('/', async (req, res) => {
 // ─── GET /api/teams/:id ──────────────────────────────────────────────────────
 
 router.get('/:id', async (req, res) => {
-  const { rows } = await pool.query(
+  const { rows } = await dbQuery(
     `SELECT id, team_name, season, sport_type, game_format,
             logo_url, primary_color, created_at
        FROM teams
       WHERE id = $1 AND coach_id = $2`,
-    [req.params.id, req.coach.id]
+    [req.params.id, req.coachId]
   );
   if (rows.length === 0) return res.status(404).json({ error: 'Team not found' });
   res.json({ success: true, team: rows[0] });
@@ -92,16 +92,16 @@ router.get('/:id', async (req, res) => {
 // ─── POST /api/teams — create a new team ────────────────────────────────────
 
 router.post('/', async (req, res) => {
-  const { teamName, season, sportType = 'lacrosse', gameFormat = '10v10' } = req.body;
+  const { teamName, season, sportType = 'field_lacrosse', gameFormat = 'standard' } = req.body;
   if (!teamName?.trim()) {
     return res.status(400).json({ error: 'teamName is required' });
   }
 
-  const { rows } = await pool.query(
+  const { rows } = await dbQuery(
     `INSERT INTO teams (coach_id, team_name, season, sport_type, game_format)
      VALUES ($1, $2, $3, $4, $5)
      RETURNING id, team_name, season, sport_type, game_format, logo_url, primary_color, created_at`,
-    [req.coach.id, teamName.trim(), season || null, sportType, gameFormat]
+    [req.coachId, teamName.trim(), season || null, sportType, gameFormat]
   );
   res.status(201).json({ success: true, team: rows[0] });
 });
@@ -109,7 +109,7 @@ router.post('/', async (req, res) => {
 // ─── PATCH /api/teams/:id — update team details ──────────────────────────────
 
 router.patch('/:id', async (req, res) => {
-  await requireTeamOwner(req.coach.id, req.params.id);
+  await requireTeamOwner(req.coachId, req.params.id);
 
   const { teamName, season, sportType, gameFormat, primaryColor } = req.body;
 
@@ -128,7 +128,7 @@ router.patch('/:id', async (req, res) => {
   }
 
   values.push(req.params.id);
-  const { rows } = await pool.query(
+  const { rows } = await dbQuery(
     `UPDATE teams SET ${fields.join(', ')} WHERE id = $${i}
      RETURNING id, team_name, season, sport_type, game_format, logo_url, primary_color`,
     values
@@ -139,14 +139,14 @@ router.patch('/:id', async (req, res) => {
 // ─── POST /api/teams/:teamId/logo — upload or replace team logo ───────────────
 
 router.post('/:teamId/logo', upload.single('logo'), async (req, res) => {
-  await requireTeamOwner(req.coach.id, req.params.teamId);
+  await requireTeamOwner(req.coachId, req.params.teamId);
 
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
 
   // Remove old logo file if one exists
-  const { rows: existing } = await pool.query(
+  const { rows: existing } = await dbQuery(
     'SELECT logo_url FROM teams WHERE id = $1',
     [req.params.teamId]
   );
@@ -157,7 +157,7 @@ router.post('/:teamId/logo', upload.single('logo'), async (req, res) => {
 
   const logoUrl = `/uploads/logos/${req.file.filename}`;
 
-  const { rows } = await pool.query(
+  const { rows } = await dbQuery(
     `UPDATE teams SET logo_url = $1 WHERE id = $2
      RETURNING id, team_name, logo_url`,
     [logoUrl, req.params.teamId]
@@ -168,16 +168,16 @@ router.post('/:teamId/logo', upload.single('logo'), async (req, res) => {
 // ─── DELETE /api/teams/:id/logo — remove logo ────────────────────────────────
 
 router.delete('/:id/logo', async (req, res) => {
-  await requireTeamOwner(req.coach.id, req.params.id);
+  await requireTeamOwner(req.coachId, req.params.id);
 
-  const { rows } = await pool.query(
+  const { rows } = await dbQuery(
     'SELECT logo_url FROM teams WHERE id = $1',
     [req.params.id]
   );
   if (rows[0]?.logo_url) {
     const filePath = path.join(__dirname, '..', rows[0].logo_url.replace(/^\//, ''));
     fs.unlink(filePath).catch(() => {});
-    await pool.query('UPDATE teams SET logo_url = NULL WHERE id = $1', [req.params.id]);
+    await dbQuery('UPDATE teams SET logo_url = NULL WHERE id = $1', [req.params.id]);
   }
   res.json({ success: true });
 });

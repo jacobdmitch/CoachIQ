@@ -1,4 +1,4 @@
-import { query as pool } from './database.js';
+import { query as dbQuery } from './database.js';
 import logger from './logger.js';
 
 /**
@@ -29,7 +29,7 @@ export const listPlays = async (coachId, filters = {}) => {
 
     query += ` ORDER BY p.created_at DESC`;
 
-    const result = await pool.query(query, params);
+    const result = await dbQuery(query, params);
     return result.rows;
   } catch (err) {
     logger.error('Error listing plays:', err);
@@ -45,7 +45,7 @@ export const listPlays = async (coachId, filters = {}) => {
  */
 export const getPlay = async (playId, coachId) => {
   try {
-    const result = await pool.query(
+    const result = await dbQuery(
       `SELECT p.id, p.team_id, p.title, p.situation_tag, p.diagram_data, p.notes, p.created_at, p.updated_at
        FROM plays p
        JOIN teams t ON p.team_id = t.id
@@ -73,7 +73,7 @@ export const getPlay = async (playId, coachId) => {
 export const createPlay = async (coachId, data) => {
   try {
     // Verify coach owns the team
-    const teamResult = await pool.query(
+    const teamResult = await dbQuery(
       `SELECT id FROM teams WHERE id = $1 AND coach_id = $2`,
       [data.teamId, coachId]
     );
@@ -82,7 +82,7 @@ export const createPlay = async (coachId, data) => {
       throw new Error('Team not found or unauthorized');
     }
 
-    const result = await pool.query(
+    const result = await dbQuery(
       `INSERT INTO plays (team_id, title, situation_tag, diagram_data, notes)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING id, team_id, title, situation_tag, diagram_data, notes, created_at, updated_at`,
@@ -112,7 +112,7 @@ export const createPlay = async (coachId, data) => {
 export const updatePlay = async (playId, coachId, data) => {
   try {
     // Verify coach owns the play
-    const playResult = await pool.query(
+    const playResult = await dbQuery(
       `SELECT p.id FROM plays p
        JOIN teams t ON p.team_id = t.id
        WHERE p.id = $1 AND t.coach_id = $2`,
@@ -157,7 +157,7 @@ export const updatePlay = async (playId, coachId, data) => {
 
     params.push(playId);
 
-    const result = await pool.query(
+    const result = await dbQuery(
       `UPDATE plays SET ${updateFields.join(', ')} WHERE id = $${paramIndex}
        RETURNING id, team_id, title, situation_tag, diagram_data, notes, created_at, updated_at`,
       params
@@ -179,7 +179,7 @@ export const updatePlay = async (playId, coachId, data) => {
 export const deletePlay = async (playId, coachId) => {
   try {
     // Verify coach owns the play
-    const playResult = await pool.query(
+    const playResult = await dbQuery(
       `SELECT p.id FROM plays p
        JOIN teams t ON p.team_id = t.id
        WHERE p.id = $1 AND t.coach_id = $2`,
@@ -190,7 +190,7 @@ export const deletePlay = async (playId, coachId) => {
       throw new Error('Play not found or unauthorized');
     }
 
-    await pool.query(`DELETE FROM plays WHERE id = $1`, [playId]);
+    await dbQuery(`DELETE FROM plays WHERE id = $1`, [playId]);
     return true;
   } catch (err) {
     logger.error('Error deleting play:', err);
@@ -217,7 +217,7 @@ export const duplicatePlay = async (playId, coachId, newTitle) => {
     // Create copy with " (Copy)" suffix if no custom title provided
     const title = newTitle || `${original.title} (Copy)`;
 
-    const result = await pool.query(
+    const result = await dbQuery(
       `INSERT INTO plays (team_id, title, situation_tag, diagram_data, notes)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING id, team_id, title, situation_tag, diagram_data, notes, created_at, updated_at`,

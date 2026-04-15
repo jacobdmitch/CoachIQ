@@ -34,13 +34,13 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
        a.skill_passing, a.skill_defense, a.skill_faceoff,
        a.skill_transition, a.skill_field_awareness,
        -- Season stats from view (if available)
-       COALESCE(aps.total_goals, 0)        AS goals,
-       COALESCE(aps.total_assists, 0)      AS assists,
-       COALESCE(aps.total_shots, 0)        AS shots,
-       COALESCE(aps.total_ground_balls, 0) AS ground_balls,
-       COALESCE(aps.games_played, 0)       AS games_played
+       COALESCE(aps.goals, 0)          AS goals,
+       COALESCE(aps.assists, 0)        AS assists,
+       COALESCE(aps.shots, 0)          AS shots,
+       COALESCE(aps.ground_balls, 0)   AS ground_balls,
+       COALESCE(aps.games_participated, 0) AS games_played
      FROM athletes a
-     LEFT JOIN athlete_performance_summary aps ON a.id = aps.athlete_id
+     LEFT JOIN athlete_season_stats aps ON a.id = aps.athlete_id
      WHERE a.team_id = $1
      ORDER BY a.primary_position, a.last_name`,
     [teamId]
@@ -54,13 +54,13 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
 router.get('/:id', authenticateToken, asyncHandler(async (req, res) => {
   const result = await query(
     `SELECT a.*,
-       COALESCE(aps.total_goals, 0)        AS goals,
-       COALESCE(aps.total_assists, 0)      AS assists,
-       COALESCE(aps.total_shots, 0)        AS shots,
-       COALESCE(aps.total_ground_balls, 0) AS ground_balls,
-       COALESCE(aps.games_played, 0)       AS games_played
+       COALESCE(aps.goals, 0)          AS goals,
+       COALESCE(aps.assists, 0)        AS assists,
+       COALESCE(aps.shots, 0)          AS shots,
+       COALESCE(aps.ground_balls, 0)   AS ground_balls,
+       COALESCE(aps.games_participated, 0) AS games_played
      FROM athletes a
-     LEFT JOIN athlete_performance_summary aps ON a.id = aps.athlete_id
+     LEFT JOIN athlete_season_stats aps ON a.id = aps.athlete_id
      WHERE a.id = $1`,
     [req.params.id]
   );

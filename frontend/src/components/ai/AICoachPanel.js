@@ -194,7 +194,7 @@ export default function AICoachPanel({ gameId, context }) {
         <>
           <div className="ai-overlay" onClick={() => setOpen(false)} aria-hidden="true" />
 
-          <aside className="ai-panel" role="complementary" aria-label="AI Coach panel">
+          <aside className="ai-panel" aria-label="AI Coach panel">
 
             {/* Header */}
             <div className="ai-panel-header">

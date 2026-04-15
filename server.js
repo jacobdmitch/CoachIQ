@@ -32,7 +32,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new SocketIOServer(server, {
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: process.env.CORS_ORIGIN || 'https://coachiq.onrender.com',
     methods: ['GET', 'POST'],
     credentials: true,
   },
@@ -44,7 +44,7 @@ app.set('trust proxy', 1);
 app.use(helmet());
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: process.env.CORS_ORIGIN || 'https://coachiq.onrender.com',
     credentials: true,
   })
 );

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../config/api.js';
+import { useAuth } from '../../context/AuthContext.js';
 import PlayCard from './PlayCard.js';
 import PlayEditor from './PlayEditor.js';
 
@@ -28,19 +29,16 @@ const SITUATION_LABELS = {
 /**
  * PlayLibrary - Play library list view with filtering
  */
-export default function PlayLibrary({ teamId }) {
+export default function PlayLibrary() {
+  const { team } = useAuth();
+  const teamId = team?.id;
   const [plays, setPlays] = useState([]);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState('');
   const [editingPlay, setEditingPlay] = useState(null);
   const [isCreating, setIsCreating] = useState(false);
 
-  // Load plays
-  useEffect(() => {
-    loadPlays();
-  }, [teamId, filter]);
-
-  const loadPlays = async () => {
+  const loadPlays = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
@@ -55,7 +53,12 @@ export default function PlayLibrary({ teamId }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [teamId, filter]);
+
+  // Load plays
+  useEffect(() => {
+    loadPlays();
+  }, [loadPlays]);
 
   const handleSavePlay = async (playData) => {
     try {

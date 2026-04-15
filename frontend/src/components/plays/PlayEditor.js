@@ -1,4 +1,4 @@
-import React, { useReducer, useRef, useCallback, useState } from 'react';
+import React, { useReducer, useRef, useState } from 'react';
 import FieldSVG from './FieldSVG.js';
 
 const initialDiagramState = {
@@ -272,13 +272,14 @@ export default function PlayEditor({ play, teamId, onSave, onCancel }) {
     }
   };
 
+  // eslint-disable-next-line no-unused-vars
   const handleCanvasMouseMove = (e) => {
     if (diagram.selectedTool === 'arrow' && diagram.drawingArrow) {
       const svg = canvasRef.current;
       const rect = svg.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / rect.width;
-      const y = (e.clientY - rect.top) / rect.height;
-      // Visualized in render, not stored yet
+      // Coordinates for future arrow preview rendering
+      void ((e.clientX - rect.left) / rect.width);
+      void ((e.clientY - rect.top) / rect.height);
     }
   };
 

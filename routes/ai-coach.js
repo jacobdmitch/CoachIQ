@@ -5,7 +5,7 @@ import logger from '../services/logger.js';
 import { query } from '../services/database.js';
 import { getLineCoachRecommendation, getPositionRecommendation } from '../services/lineCoachEngine.js';
 import { getPositionRecommendations } from '../services/positionEngine.js';
-import { logAICall, getGameAIStats, getGameCallHistory } from '../services/aiCallLogger.js';
+import { logAICall, getCoachAIStats, getCoachCallHistory } from '../services/aiCallLogger.js';
 
 const router = express.Router();
 
@@ -54,8 +54,8 @@ router.post(
       clockRunning: false,
       clockTime: 0,
       periodDuration: game.format === '6s' ? 12 * 60 : 15 * 60,
-      homeScore: game.home_score || 0,
-      awayScore: game.away_score || 0,
+      homeScore: game.score_home || 0,
+      awayScore: game.score_away || 0,
       fieldPositions: {},
       bench: [],
       events: [],
@@ -74,9 +74,9 @@ router.post(
     const statsResult = await query(
       `SELECT athlete_id, goals, assists, shots, ground_balls
        FROM athlete_season_stats
-       WHERE game_id IN (SELECT id FROM games WHERE season_id = $1)
+       WHERE team_id = $1
        LIMIT 200`,
-      [game.season_id]
+      [game.team_id]
     );
     const seasonStats = {};
     statsResult.rows.forEach((row) => {
@@ -99,14 +99,12 @@ router.post(
 
     // Log API call
     await logAICall({
+      coachId: req.coachId,
       model: 'claude-haiku-4-5-20251001',
-      gameId,
       inputTokens: 500, // Approximate
       outputTokens: 300, // Approximate
       latencyMs,
-      endpoint: 'line-coach',
-      requestType: 'recommendations',
-      success: !recommendation.error,
+      toolName: 'line-coach',
     });
 
     logger.info(`Line Coach recommendations generated for game ${gameId}`, {
@@ -161,18 +159,14 @@ router.post(
     const latencyMs = Date.now() - startTime;
 
     // Log API call
-    if (gameId) {
-      await logAICall({
-        model: 'claude-haiku-4-5-20251001',
-        gameId,
-        inputTokens: 400,
-        outputTokens: 250,
-        latencyMs,
-        endpoint: 'position-fit',
-        requestType: 'position_recommendation',
-        success: !claudeAnalysis.error,
-      });
-    }
+    await logAICall({
+      coachId: req.coachId,
+      model: 'claude-haiku-4-5-20251001',
+      inputTokens: 400,
+      outputTokens: 250,
+      latencyMs,
+      toolName: 'position-fit',
+    });
 
     logger.info(`Position fit analysis for athlete ${athleteId}`, {
       primaryPosition: positionRecs.recommendations.primary.position,
@@ -194,7 +188,7 @@ router.post(
 
 /**
  * GET /conversation/:gameId
- * Get AI conversation history for a game
+ * Get AI call history for the current coach
  */
 router.get(
   '/conversation/:gameId',
@@ -203,11 +197,11 @@ router.get(
     const { gameId } = req.params;
     const { limit = 50 } = req.query;
 
-    // Get call history
-    const callHistory = await getGameCallHistory(gameId, { limit: parseInt(limit) });
+    // Get call history (scoped to coach, not game -- table has no game_id column)
+    const callHistory = await getCoachCallHistory(req.coachId, { limit: parseInt(limit) });
 
     // Get call statistics
-    const stats = await getGameAIStats(gameId);
+    const stats = await getCoachAIStats(req.coachId);
 
     res.json({
       success: true,
@@ -220,7 +214,7 @@ router.get(
 
 /**
  * GET /stats/:gameId
- * Get AI usage statistics for a game
+ * Get AI usage statistics for the current coach
  */
 router.get(
   '/stats/:gameId',
@@ -228,7 +222,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
 
-    const stats = await getGameAIStats(gameId);
+    const stats = await getCoachAIStats(req.coachId);
 
     res.json({
       success: true,

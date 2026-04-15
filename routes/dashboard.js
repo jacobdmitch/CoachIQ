@@ -74,12 +74,12 @@ router.get('/season/:teamId', authenticateToken, asyncHandler(async (req, res) =
   const topScorersResult = await query(
     `SELECT
        a.id, a.first_name, a.last_name, a.jersey_number, a.primary_position,
-       COALESCE(aps.total_goals, 0)   AS goals,
-       COALESCE(aps.total_assists, 0) AS assists
+       COALESCE(aps.goals, 0)   AS goals,
+       COALESCE(aps.assists, 0) AS assists
      FROM athletes a
-     LEFT JOIN athlete_performance_summary aps ON a.id = aps.athlete_id
+     LEFT JOIN athlete_season_stats aps ON a.id = aps.athlete_id
      WHERE a.team_id = $1
-     ORDER BY (COALESCE(aps.total_goals, 0) + COALESCE(aps.total_assists, 0)) DESC
+     ORDER BY (COALESCE(aps.goals, 0) + COALESCE(aps.assists, 0)) DESC
      LIMIT 5`,
     [teamId]
   );

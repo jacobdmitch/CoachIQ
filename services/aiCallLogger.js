@@ -4,13 +4,18 @@ import logger from './logger.js';
 /**
  * Log LLM API calls to database for monitoring and cost tracking
  * Records model, tokens used, latency, and estimated costs
+ *
+ * Table schema (ai_call_logs):
+ *   id UUID PK, coach_id UUID NOT NULL, model VARCHAR(100),
+ *   input_tokens INTEGER, output_tokens INTEGER, latency_ms INTEGER,
+ *   cost_estimate NUMERIC(8,6), tool_name VARCHAR(100), created_at TIMESTAMPTZ
  */
 
-// Approximate token costs per model (as of knowledge cutoff)
+// Approximate token costs per model (dollars per million tokens)
 const TOKEN_COSTS = {
   'claude-haiku-4-5-20251001': {
-    inputPerMTok: 0.80, // $0.80 per million input tokens
-    outputPerMTok: 4.0, // $4.00 per million output tokens
+    inputPerMTok: 0.80,
+    outputPerMTok: 4.0,
   },
   'claude-3-5-sonnet-20241022': {
     inputPerMTok: 3.0,
@@ -23,90 +28,66 @@ const TOKEN_COSTS = {
 };
 
 /**
- * Calculate estimated cost for API call
+ * Calculate estimated cost in dollars for an API call
  * @private
  */
 function _calculateCost(model, inputTokens, outputTokens) {
   const costs = TOKEN_COSTS[model] || TOKEN_COSTS['claude-haiku-4-5-20251001'];
   const inputCost = (inputTokens / 1000000) * costs.inputPerMTok;
   const outputCost = (outputTokens / 1000000) * costs.outputPerMTok;
-  return (inputCost + outputCost) * 100; // Return in cents
+  return inputCost + outputCost; // dollars
 }
 
 /**
  * Log an LLM API call
  *
- * @param {Object} callData - Call information
- * @param {string} callData.model - Model name
- * @param {string} callData.gameId - Associated game ID
- * @param {number} callData.inputTokens - Tokens used in input
- * @param {number} callData.outputTokens - Tokens used in output
- * @param {number} callData.latencyMs - Response latency in milliseconds
- * @param {string} callData.endpoint - API endpoint called
- * @param {string} callData.requestType - Type of request (recommendations, position_fit, etc.)
- * @param {boolean} callData.success - Whether call succeeded
+ * @param {Object} callData
+ * @param {string} callData.coachId - Coach UUID (required by schema)
+ * @param {string} [callData.model] - Model name
+ * @param {number} [callData.inputTokens] - Input token count
+ * @param {number} [callData.outputTokens] - Output token count
+ * @param {number} [callData.latencyMs] - Response latency in ms
+ * @param {string} [callData.toolName] - Tool/endpoint name (e.g. 'line-coach', 'position-fit')
  * @returns {Promise<Object>} Logged record
  */
 export async function logAICall(callData) {
   try {
     const {
+      coachId,
       model = 'claude-haiku-4-5-20251001',
-      gameId,
       inputTokens = 0,
       outputTokens = 0,
       latencyMs = 0,
-      endpoint = 'line-coach',
-      requestType = 'general',
-      success = true,
+      toolName = 'line-coach',
     } = callData;
 
-    const totalTokens = inputTokens + outputTokens;
-    const estimatedCostCents = _calculateCost(model, inputTokens, outputTokens);
+    if (!coachId) {
+      logger.warn('logAICall called without coachId, skipping');
+      return { error: 'coachId required' };
+    }
+
+    const costEstimate = _calculateCost(model, inputTokens, outputTokens);
 
     const result = await query(
-      `
-      INSERT INTO ai_call_logs (
-        model,
-        game_id,
-        input_tokens,
-        output_tokens,
-        total_tokens,
-        latency_ms,
-        endpoint,
-        request_type,
-        estimated_cost_cents,
-        success,
-        created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
-      RETURNING id, created_at
-      `,
-      [
-        model,
-        gameId || null,
-        inputTokens,
-        outputTokens,
-        totalTokens,
-        latencyMs,
-        endpoint,
-        requestType,
-        estimatedCostCents,
-        success,
-      ]
+      `INSERT INTO ai_call_logs (coach_id, model, input_tokens, output_tokens, latency_ms, cost_estimate, tool_name)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, created_at`,
+      [coachId, model, inputTokens, outputTokens, latencyMs, costEstimate, toolName]
     );
 
     logger.debug('AI call logged', {
       callId: result.rows[0]?.id,
       model,
-      tokens: totalTokens,
-      costCents: estimatedCostCents,
+      tokens: inputTokens + outputTokens,
+      costEstimate,
       latencyMs,
     });
 
     return {
       callId: result.rows[0]?.id,
       model,
-      totalTokens,
-      estimatedCostCents,
+      totalTokens: inputTokens + outputTokens,
+      costEstimate,
       latencyMs,
     };
   } catch (err) {
@@ -116,66 +97,58 @@ export async function logAICall(callData) {
 }
 
 /**
- * Get call statistics for a game
+ * Get call statistics for a coach
  *
- * @param {string|number} gameId - Game ID
+ * @param {string} coachId - Coach UUID
  * @returns {Promise<Object>} Call statistics
  */
-export async function getGameAIStats(gameId) {
+export async function getCoachAIStats(coachId) {
   try {
     const result = await query(
-      `
-      SELECT
-        COUNT(*) as call_count,
-        SUM(total_tokens) as total_tokens,
-        AVG(latency_ms) as avg_latency_ms,
-        SUM(estimated_cost_cents) as total_cost_cents,
-        COUNT(DISTINCT endpoint) as endpoint_count
-      FROM ai_call_logs
-      WHERE game_id = $1 AND success = true
-      `,
-      [gameId]
+      `SELECT
+        COUNT(*) AS call_count,
+        COALESCE(SUM(input_tokens + output_tokens), 0) AS total_tokens,
+        COALESCE(AVG(latency_ms), 0) AS avg_latency_ms,
+        COALESCE(SUM(cost_estimate), 0) AS total_cost
+       FROM ai_call_logs
+       WHERE coach_id = $1`,
+      [coachId]
     );
 
     const stats = result.rows[0];
     return {
-      gameId,
+      coachId,
       callCount: parseInt(stats.call_count) || 0,
       totalTokens: parseInt(stats.total_tokens) || 0,
       avgLatencyMs: parseFloat(stats.avg_latency_ms) || 0,
-      totalCostCents: parseInt(stats.total_cost_cents) || 0,
-      totalCostDollars: (parseInt(stats.total_cost_cents) || 0) / 100,
-      endpointCount: parseInt(stats.endpoint_count) || 0,
+      totalCostDollars: parseFloat(stats.total_cost) || 0,
     };
   } catch (err) {
-    logger.error('Error getting game AI stats:', err);
+    logger.error('Error getting coach AI stats:', err);
     return { error: err.message };
   }
 }
 
 /**
- * Get aggregate statistics across all games
+ * Get aggregate statistics across all coaches
  *
- * @param {Object} options - Query options
- * @param {number} options.daysBack - Number of days to look back (default 30)
+ * @param {Object} options
+ * @param {number} [options.daysBack=30] - Number of days to look back
  * @returns {Promise<Object>} Aggregate statistics
  */
 export async function getAggregateAIStats(options = {}) {
   try {
     const { daysBack = 30 } = options;
     const result = await query(
-      `
-      SELECT
-        COUNT(*) as total_calls,
-        SUM(total_tokens) as total_tokens,
-        AVG(latency_ms) as avg_latency_ms,
-        AVG(estimated_cost_cents) as avg_cost_per_call_cents,
-        SUM(estimated_cost_cents) as total_cost_cents,
-        COUNT(DISTINCT model) as model_count,
-        COUNT(CASE WHEN success = false THEN 1 END) as failed_calls
-      FROM ai_call_logs
-      WHERE created_at >= NOW() - INTERVAL '1 day' * $1
-      `,
+      `SELECT
+        COUNT(*) AS total_calls,
+        COALESCE(SUM(input_tokens + output_tokens), 0) AS total_tokens,
+        COALESCE(AVG(latency_ms), 0) AS avg_latency_ms,
+        COALESCE(AVG(cost_estimate), 0) AS avg_cost_per_call,
+        COALESCE(SUM(cost_estimate), 0) AS total_cost,
+        COUNT(DISTINCT model) AS model_count
+       FROM ai_call_logs
+       WHERE created_at >= NOW() - INTERVAL '1 day' * $1`,
       [daysBack]
     );
 
@@ -185,11 +158,9 @@ export async function getAggregateAIStats(options = {}) {
       totalCalls: parseInt(stats.total_calls) || 0,
       totalTokens: parseInt(stats.total_tokens) || 0,
       avgLatencyMs: parseFloat(stats.avg_latency_ms) || 0,
-      avgCostPerCallCents: parseInt(stats.avg_cost_per_call_cents) || 0,
-      totalCostCents: parseInt(stats.total_cost_cents) || 0,
-      totalCostDollars: (parseInt(stats.total_cost_cents) || 0) / 100,
+      avgCostPerCall: parseFloat(stats.avg_cost_per_call) || 0,
+      totalCostDollars: parseFloat(stats.total_cost) || 0,
       modelCount: parseInt(stats.model_count) || 0,
-      failedCalls: parseInt(stats.failed_calls) || 0,
     };
   } catch (err) {
     logger.error('Error getting aggregate AI stats:', err);
@@ -198,36 +169,23 @@ export async function getAggregateAIStats(options = {}) {
 }
 
 /**
- * Get call history for a game
+ * Get call history for a coach
  *
- * @param {string|number} gameId - Game ID
- * @param {Object} options - Query options
- * @param {number} options.limit - Max records to return (default 50)
+ * @param {string} coachId - Coach UUID
+ * @param {Object} [options]
+ * @param {number} [options.limit=50] - Max records to return
  * @returns {Promise<Array>} Call history
  */
-export async function getGameCallHistory(gameId, options = {}) {
+export async function getCoachCallHistory(coachId, options = {}) {
   try {
     const { limit = 50 } = options;
     const result = await query(
-      `
-      SELECT
-        id,
-        model,
-        input_tokens,
-        output_tokens,
-        total_tokens,
-        latency_ms,
-        endpoint,
-        request_type,
-        estimated_cost_cents,
-        success,
-        created_at
-      FROM ai_call_logs
-      WHERE game_id = $1
-      ORDER BY created_at DESC
-      LIMIT $2
-      `,
-      [gameId, limit]
+      `SELECT id, model, input_tokens, output_tokens, latency_ms, cost_estimate, tool_name, created_at
+       FROM ai_call_logs
+       WHERE coach_id = $1
+       ORDER BY created_at DESC
+       LIMIT $2`,
+      [coachId, limit]
     );
 
     return result.rows.map((row) => ({
@@ -235,12 +193,10 @@ export async function getGameCallHistory(gameId, options = {}) {
       model: row.model,
       inputTokens: row.input_tokens,
       outputTokens: row.output_tokens,
-      totalTokens: row.total_tokens,
+      totalTokens: (row.input_tokens || 0) + (row.output_tokens || 0),
       latencyMs: row.latency_ms,
-      endpoint: row.endpoint,
-      requestType: row.request_type,
-      estimatedCostCents: row.estimated_cost_cents,
-      success: row.success,
+      toolName: row.tool_name,
+      costEstimate: parseFloat(row.cost_estimate) || 0,
       timestamp: row.created_at,
     }));
   } catch (err) {
@@ -251,7 +207,7 @@ export async function getGameCallHistory(gameId, options = {}) {
 
 export default {
   logAICall,
-  getGameAIStats,
+  getCoachAIStats,
   getAggregateAIStats,
-  getGameCallHistory,
+  getCoachCallHistory,
 };
