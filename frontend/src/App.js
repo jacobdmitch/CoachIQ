@@ -11,6 +11,7 @@ const RosterList       = lazy(() => import('./components/roster/RosterList.js'))
 const AthleteProfile   = lazy(() => import('./components/roster/AthleteProfile.js'));
 const GameMode         = lazy(() => import('./components/game/GameMode.js'));
 const GameSummary      = lazy(() => import('./components/game/GameSummary.js'));
+const LinesPage        = lazy(() => import('./components/lines/LinesPage.js'));
 const PlayLibrary      = lazy(() => import('./components/plays/PlayLibrary.js'));
 const PracticeCalendar = lazy(() => import('./components/practice/PracticeCalendar.js'));
 const SettingsPage     = lazy(() => import('./components/settings/SettingsPage.js'));
@@ -100,6 +101,7 @@ export default function App() {
               <Route path="game"                 element={<GameMode />} />
               <Route path="game/:gameId"         element={<GameMode />} />
               <Route path="game/:gameId/summary" element={<GameSummary />} />
+              <Route path="lines"                element={<LinesPage />} />
               <Route path="plays"                element={<PlayLibrary />} />
               <Route path="practice"             element={<PracticeCalendar />} />
               <Route path="settings"             element={<SettingsPage />} />
