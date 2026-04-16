@@ -13,6 +13,7 @@ import GameSetup from './GameSetup';
 import StagingPanel from './StagingPanel';
 import PlaytimePanel from './PlaytimePanel';
 import OpponentStatsPanel from './OpponentStatsPanel';
+import OpponentThreatsPanel from './OpponentThreatsPanel';
 import GameClocksPanel from './GameClocksPanel';
 import AICoachPanel from '../ai/AICoachPanel';
 import { formatDateTime } from '../../utils/formatters';
@@ -683,7 +684,7 @@ export default function GameMode() {
   const { game, loading, updateScore, updateStatus, refresh: refreshGame } = useGame(gameId);
   const {
     connected, liveState, clockTime, mergeAlerts, activating,
-    playtime, equityFlags,
+    playtime, equityFlags, threats,
     startClock, stopClock, logOpponentEvent,
     addToQueue, removeFromQueue, removeMoveFromQueue, activateQueue,
   } = useGameSocket(gameId, token);
@@ -995,6 +996,13 @@ export default function GameMode() {
         opposingTeamId={game?.opposing_team_id || null}
         opponentName={game?.opponent || 'Opponent'}
         logOpponentEvent={logOpponentEvent}
+      />
+
+      {/* ── Opponent Threats (P6) ────────────────────────── */}
+      <OpponentThreatsPanel
+        gameId={gameId}
+        opposingTeamId={game?.opposing_team_id || null}
+        threats={threats}
       />
 
       {/* ── Quick Actions ────────────────────────────────── */}

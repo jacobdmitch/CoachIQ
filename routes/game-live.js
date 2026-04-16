@@ -10,6 +10,7 @@ import { persistGameEvent, persistPlaytimeEntry, saveGameStateSnapshot, loadGame
 import { broadcastGameUpdate } from './game-sync.js';
 import { gameStates, playtimeTrackers, clockIntervals } from '../services/liveGameStore.js';
 import { resolveSituation } from '../services/situationResolver.js';
+import { computeOpposingThreats } from '../services/opponentScoutingService.js';
 
 const subSchema = z.object({
   playerIn: z.string().uuid(),
@@ -444,7 +445,59 @@ router.post(
     broadcastGameUpdate(gameId, 'game_event', event);
     logger.debug(`Opponent event: ${gameId}, ${eventType}, opposingPlayer ${opposingPlayerId || 'team'}`);
 
+    // Recompute and broadcast opponent threat scores so the sideline
+    // panel reflects the new event immediately. Fire-and-forget — a DB
+    // hiccup here shouldn't block the event response.
+    broadcastThreats(gameId).catch(err =>
+      logger.warn(`Threat broadcast failed for ${gameId}: ${err.message}`)
+    );
+
     res.json({ success: true, event, state: gameState.getState() });
+  })
+);
+
+// ─── Threat recompute / broadcast helper ─────────────────────────────────────
+
+async function broadcastThreats(gameId) {
+  const gameState = gameStates.get(gameId);
+  if (!gameState) return;
+  const gameRow = await query(
+    'SELECT opposing_team_id FROM games WHERE id = $1',
+    [gameId]
+  );
+  const opposingTeamId = gameRow.rows[0]?.opposing_team_id;
+  if (!opposingTeamId) return;
+
+  const threats = await computeOpposingThreats({
+    opposingTeamId,
+    liveAwayEvents: gameState.events || [],
+  });
+  broadcastGameUpdate(gameId, 'opponent_threats', { threats });
+}
+
+// ─── GET /:gameId/threats — on-demand threat ranking ─────────────────────────
+
+router.get(
+  '/:gameId/threats',
+  authenticateToken,
+  asyncHandler(async (req, res) => {
+    const { gameId } = req.params;
+    const gameRow = await query(
+      'SELECT opposing_team_id FROM games WHERE id = $1',
+      [gameId]
+    );
+    if (gameRow.rows.length === 0) throw new AppError('Game not found', 404);
+    const opposingTeamId = gameRow.rows[0].opposing_team_id;
+
+    if (!opposingTeamId) {
+      return res.json({ success: true, threats: [], note: 'No opposing team linked to this game.' });
+    }
+    const gameState = gameStates.get(gameId);
+    const threats = await computeOpposingThreats({
+      opposingTeamId,
+      liveAwayEvents: gameState?.events || [],
+    });
+    res.json({ success: true, threats });
   })
 );
 

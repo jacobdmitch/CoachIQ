@@ -26,6 +26,7 @@ export function useGameSocket(gameId, token) {
   const [activating,   setActivating]   = useState(false); // batch-sub in-flight
   const [playtime,     setPlaytime]     = useState([]);    // live per-athlete playtime summary
   const [equityFlags,  setEquityFlags]  = useState([]);    // live playtime equity flags
+  const [threats,      setThreats]      = useState([]);    // opposing-player threat ranking
 
   useEffect(() => {
     if (!gameId || !token) return;
@@ -62,6 +63,12 @@ export function useGameSocket(gameId, token) {
     socket.on('playtime_tick', ({ summary, equityFlags: flags }) => {
       if (Array.isArray(summary))      setPlaytime(summary);
       if (Array.isArray(flags))        setEquityFlags(flags);
+    });
+
+    // Opponent threats — emitted after each logged opponent event so the
+    // sideline panel reflects the new score without a refresh.
+    socket.on('opponent_threats', ({ threats: list }) => {
+      if (Array.isArray(list)) setThreats(list);
     });
 
     // Score update — emitted after a score change
@@ -220,6 +227,7 @@ export function useGameSocket(gameId, token) {
     activating,
     playtime,
     equityFlags,
+    threats,
     startClock,
     stopClock,
     logGoal,
