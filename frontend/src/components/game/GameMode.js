@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -13,13 +13,15 @@ import GameSetup from './GameSetup';
 import StagingPanel from './StagingPanel';
 import PlaytimePanel from './PlaytimePanel';
 import OpponentStatsPanel from './OpponentStatsPanel';
+import GameClocksPanel from './GameClocksPanel';
 import AICoachPanel from '../ai/AICoachPanel';
 import { formatDateTime } from '../../utils/formatters';
 
 const PERIODS = ['1st', '2nd', '3rd', '4th', 'OT'];
 
-// Default shot clock for 6s format (seconds); overridden by game.shot_clock_seconds
-const DEFAULT_SHOT_CLOCK = 60;
+// Default shot clock for 6s format (seconds); overridden by game.shot_clock_seconds.
+// 45s matches the common CIF/club sixes cadence; rules JSON supports 45/60/75.
+const DEFAULT_SHOT_CLOCK = 45;
 
 function formatClock(seconds) {
   if (seconds === null || seconds === undefined) return '—:——';
@@ -221,101 +223,6 @@ function ScoreControl({ score, side, onAdjust }) {
         onPointerLeave={e => e.currentTarget.style.transform = 'scale(1)'}
         aria-label={`Increase ${side} score`}
       >+</button>
-    </div>
-  );
-}
-
-// ─── Shot clock (6s format only) ─────────────────────────────────────────────
-
-function ShotClock({ initialSeconds }) {
-  const [timeLeft, setTimeLeft]   = useState(initialSeconds);
-  const [running,  setRunning]    = useState(false);
-  const intervalRef               = useRef(null);
-
-  // Reset when initialSeconds changes (e.g. game format loaded)
-  useEffect(() => { setTimeLeft(initialSeconds); }, [initialSeconds]);
-
-  useEffect(() => {
-    if (running) {
-      intervalRef.current = setInterval(() => {
-        setTimeLeft(prev => {
-          if (prev <= 1) {
-            clearInterval(intervalRef.current);
-            setRunning(false);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      clearInterval(intervalRef.current);
-    }
-    return () => clearInterval(intervalRef.current);
-  }, [running]);
-
-  function reset() {
-    clearInterval(intervalRef.current);
-    setRunning(false);
-    setTimeLeft(initialSeconds);
-  }
-
-  const urgent = timeLeft <= 10;
-  const expired = timeLeft === 0;
-
-  return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 'var(--sp-3)',
-      padding: 'var(--sp-3) var(--sp-4)',
-      background: expired ? 'var(--color-red-bg)' : urgent ? 'rgba(239,68,68,0.08)' : 'var(--color-surface-1)',
-      border: `1px solid ${expired ? 'var(--color-red-border)' : urgent ? 'rgba(239,68,68,0.3)' : 'var(--color-surface-2)'}`,
-      borderRadius: 'var(--radius-md)',
-    }}>
-      <span style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)', letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>
-        Shot Clock
-      </span>
-      <span style={{
-        fontFamily: 'var(--font-stats)',
-        fontSize: 'var(--text-2xl)',
-        color: expired ? 'var(--color-red)' : urgent ? '#f97316' : 'var(--color-text-primary)',
-        minWidth: 44,
-        textAlign: 'center',
-        fontVariantNumeric: 'tabular-nums',
-        letterSpacing: 2,
-      }}>
-        {timeLeft}
-      </span>
-      <div style={{ display: 'flex', gap: 'var(--sp-2)', marginLeft: 'auto' }}>
-        <button
-          onClick={() => setRunning(r => !r)}
-          style={{
-            padding: 'var(--sp-2) var(--sp-3)',
-            borderRadius: 'var(--radius-sm)',
-            background: running ? 'var(--color-red-bg)' : 'var(--color-green-bg)',
-            border: running ? '1px solid var(--color-red-border)' : '1px solid var(--color-green-border)',
-            color: running ? 'var(--color-red)' : 'var(--color-green)',
-            fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)',
-            cursor: 'pointer', minHeight: 36,
-          }}
-        >
-          {running ? '⏸' : '▶'}
-        </button>
-        <button
-          onClick={reset}
-          style={{
-            padding: 'var(--sp-2) var(--sp-3)',
-            borderRadius: 'var(--radius-sm)',
-            background: 'var(--color-surface-2)',
-            border: '1px solid var(--color-surface-3)',
-            color: 'var(--color-text-muted)',
-            fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)',
-            cursor: 'pointer', minHeight: 36,
-          }}
-        >
-          Reset
-        </button>
-      </div>
     </div>
   );
 }
@@ -1031,12 +938,11 @@ export default function GameMode() {
 
       </div>
 
-      {/* ── Shot clock (6s only) ─────────────────────────── */}
-      {is6s && (
-        <div style={{ marginBottom: 'var(--sp-6)' }}>
-          <ShotClock initialSeconds={shotClockSeconds} />
-        </div>
-      )}
+      {/* ── Secondary clocks (clear / stall / shot / timeout) ── */}
+      <GameClocksPanel
+        format={game?.format || 'standard'}
+        shotClockSeconds={shotClockSeconds}
+      />
 
       {/* ── Playtime Alerts ──────────────────────────────── */}
       {playtimeAlerts.length > 0 && (
