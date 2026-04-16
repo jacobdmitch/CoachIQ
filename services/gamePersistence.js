@@ -27,13 +27,22 @@ export async function persistGameEvent(gameId, event) {
   const dbType = EVENT_TYPE_MAP[event.type];
   if (!dbType) return; // Clock events, score updates, etc. don't go in game_events
 
-  const athleteId = event.athleteId || event.playerIn || null;
-  if (!athleteId) return;
+  const teamSide = event.teamSide === 'away' ? 'away' : 'home';
+  const athleteId = teamSide === 'home'
+    ? (event.athleteId || event.playerIn || null)
+    : null;
+  const opposingPlayerId = teamSide === 'away' ? (event.opposingPlayerId || null) : null;
+
+  // Home events must have an athlete; away events may be anonymous (team-level),
+  // so a missing opposingPlayerId is still persisted as a team-side stat.
+  if (teamSide === 'home' && !athleteId) return;
 
   try {
     await query(
-      `INSERT INTO game_events (game_id, athlete_id, event_type, period, game_clock_seconds, notes)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
+      `INSERT INTO game_events
+         (game_id, athlete_id, event_type, period, game_clock_seconds, notes,
+          team_side, opposing_player_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         gameId,
         athleteId,
@@ -41,6 +50,8 @@ export async function persistGameEvent(gameId, event) {
         event.period || 0,
         event.clockTime || null,
         event.reason || null,
+        teamSide,
+        opposingPlayerId,
       ]
     );
   } catch (err) {

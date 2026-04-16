@@ -24,6 +24,8 @@ export function useGameSocket(gameId, token) {
   const [events,       setEvents]       = useState([]);    // game event log
   const [mergeAlerts,  setMergeAlerts]  = useState([]);    // sub queue conflict alerts
   const [activating,   setActivating]   = useState(false); // batch-sub in-flight
+  const [playtime,     setPlaytime]     = useState([]);    // live per-athlete playtime summary
+  const [equityFlags,  setEquityFlags]  = useState([]);    // live playtime equity flags
 
   useEffect(() => {
     if (!gameId || !token) return;
@@ -53,6 +55,13 @@ export function useGameSocket(gameId, token) {
     // Clock tick — emitted every second by the server while clock is running
     socket.on('clock_tick', ({ clockTime: t }) => {
       setClockTime(t);
+    });
+
+    // Playtime tick — emitted periodically while the clock runs (every few
+    // seconds) with the current per-athlete summary and equity flags.
+    socket.on('playtime_tick', ({ summary, equityFlags: flags }) => {
+      if (Array.isArray(summary))      setPlaytime(summary);
+      if (Array.isArray(flags))        setEquityFlags(flags);
     });
 
     // Score update — emitted after a score change
@@ -132,6 +141,22 @@ export function useGameSocket(gameId, token) {
     }
   }, [gameId]);
 
+  // Log a stat event for the opposing team.
+  // eventType is lowercase (matches the DB enum): 'goal','shot','ground_ball',etc.
+  // opposingPlayerId is optional — pass null for an anonymous team-level stat.
+  const logOpponentEvent = useCallback(async (eventType, opposingPlayerId = null, metadata = {}) => {
+    if (!gameId) return;
+    try {
+      await apiClient.post(`/game-live/${gameId}/opponent-event`, {
+        eventType,
+        opposingPlayerId,
+        metadata,
+      });
+    } catch (err) {
+      console.error('logOpponentEvent failed:', err.response?.data?.error || err.message);
+    }
+  }, [gameId]);
+
   const makeSubstitution = useCallback(async (playerOut, playerIn, position) => {
     if (!gameId) return;
     try {
@@ -193,9 +218,12 @@ export function useGameSocket(gameId, token) {
     events,
     mergeAlerts,
     activating,
+    playtime,
+    equityFlags,
     startClock,
     stopClock,
     logGoal,
+    logOpponentEvent,
     makeSubstitution,
     addToQueue,
     removeFromQueue,
