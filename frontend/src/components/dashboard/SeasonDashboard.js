@@ -6,6 +6,7 @@ import { useGames } from '../../hooks/useGame';
 import StatCard from '../common/StatCard';
 import Badge from '../common/Badge';
 import Button from '../common/Button';
+import { formatDateTime } from '../../utils/formatters';
 
 /* ─── Schedule game modal ───────────────────────────────────────────────────── */
 
@@ -13,6 +14,7 @@ function ScheduleModal({ teamId, onClose, onSaved }) {
   const { scheduleGame } = useGames(teamId);
   const [opponent, setOpponent] = useState('');
   const [gameDate, setGameDate] = useState(new Date().toISOString().split('T')[0]);
+  const [gameTime, setGameTime] = useState('');
   const [format,   setFormat]   = useState('standard');
   const [saving,   setSaving]   = useState(false);
 
@@ -21,7 +23,7 @@ function ScheduleModal({ teamId, onClose, onSaved }) {
     if (!opponent.trim()) return;
     setSaving(true);
     try {
-      await scheduleGame({ opponent: opponent.trim(), gameDate, format });
+      await scheduleGame({ opponent: opponent.trim(), gameDate, startTime: gameTime || undefined, format });
       onSaved();
     } finally {
       setSaving(false);
@@ -71,7 +73,7 @@ function ScheduleModal({ teamId, onClose, onSaved }) {
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-4)', marginBottom: 'var(--sp-4)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--sp-4)', marginBottom: 'var(--sp-4)' }}>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Opponent</label>
               <input style={inputStyle} value={opponent} onChange={e => setOpponent(e.target.value)} placeholder="Opponent name" required />
@@ -79,6 +81,10 @@ function ScheduleModal({ teamId, onClose, onSaved }) {
             <div>
               <label style={labelStyle}>Date</label>
               <input style={inputStyle} type="date" value={gameDate} onChange={e => setGameDate(e.target.value)} />
+            </div>
+            <div>
+              <label style={labelStyle}>Time <span style={{ fontWeight: 300, textTransform: 'none', letterSpacing: 0 }}>(opt.)</span></label>
+              <input style={inputStyle} type="time" value={gameTime} onChange={e => setGameTime(e.target.value)} />
             </div>
             <div>
               <label style={labelStyle}>Format</label>
@@ -101,10 +107,6 @@ function ScheduleModal({ teamId, onClose, onSaved }) {
   );
 }
 
-function formatDate(dateStr) {
-  if (!dateStr) return '';
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
 
 export default function SeasonDashboard() {
   const { team, coach } = useAuth();
@@ -242,7 +244,7 @@ export default function SeasonDashboard() {
                     vs {game.opponent}
                   </p>
                   <p style={{ fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginTop: 2 }}>
-                    {formatDate(game.game_date)}
+                    {formatDateTime(game.game_date, game.start_time, { month: 'short', day: 'numeric' })}
                   </p>
                 </div>
                 <span style={{ fontFamily: 'var(--font-stats)', fontSize: 'var(--text-lg)', color: 'var(--color-text-secondary)', letterSpacing: 1 }}>

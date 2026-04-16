@@ -82,7 +82,7 @@ export default function AthleteProfile() {
     );
   }
 
-  const shotPct = athlete.shots > 0 ? Math.round((athlete.goals / athlete.shots) * 100) : 0;
+  const shotPct = athlete.shots > 0 ? Math.min(100, Math.round((Number(athlete.goals) / Number(athlete.shots)) * 100)) : 0;
 
   return (
     <div className="page-content">
@@ -144,7 +144,7 @@ export default function AthleteProfile() {
       <div className="grid-4" style={{ marginBottom: 'var(--sp-8)' }}>
         <StatCard label="Goals"       value={athlete.goals        ?? 0} />
         <StatCard label="Assists"     value={athlete.assists      ?? 0} />
-        <StatCard label="Points"      value={(athlete.goals ?? 0) + (athlete.assists ?? 0)} />
+        <StatCard label="Points"      value={Number(athlete.goals ?? 0) + Number(athlete.assists ?? 0)} />
         <StatCard label="Shot %"      value={shotPct} unit="%" />
       </div>
       <div className="grid-4" style={{ marginBottom: 'var(--sp-8)' }}>

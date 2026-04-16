@@ -3,15 +3,12 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import apiClient from '../../config/api';
 import StatCard from '../common/StatCard';
 import Badge from '../common/Badge';
+import { formatDateTime } from '../../utils/formatters';
 
 const POS_VARIANT = { Attack: 'red', Midfield: 'gold', Defense: 'blue', Goalie: 'green', FOGO: 'amber' };
 
-function formatDate(dateStr) {
-  if (!dateStr) return '';
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
-  });
-}
+const GAME_DATE_OPTS = { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' };
+
 
 function minutesLabel(min) {
   const m = Number(min) || 0;
@@ -96,7 +93,7 @@ export default function GameSummary() {
             )}
           </div>
           <p className="page-subtitle">
-            {formatDate(game.game_date)}
+            {formatDateTime(game.game_date, game.start_time, GAME_DATE_OPTS)}
             {game.location ? ` · ${game.location}` : ''}
             {game.format === '6s' ? ' · 6-Man' : ''}
           </p>

@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="CoachIQ App Icon">
+  <title>CoachIQ App Icon</title>
+  <defs>
+    <clipPath id="roundedSquare">
+      <rect width="1024" height="1024" rx="224" ry="224"/>
+    </clipPath>
+    <clipPath id="pocketClipApp">
+      <path d="M 512 218 C 652 218 690 280 676 370 L 648 646 C 636 718 596 742 512 742 C 428 742 388 718 376 646 L 348 370 C 334 280 372 218 512 218 Z"/>
+    </clipPath>
+    <!-- subtle vignette gradient for depth -->
+    <radialGradient id="bgGrad" cx="50%" cy="35%" r="70%">
+      <stop offset="0%" stop-color="#1C2B3A"/>
+      <stop offset="100%" stop-color="#0A1218"/>
+    </radialGradient>
+    <!-- gold shimmer on mark -->
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#E4C255"/>
+      <stop offset="50%" stop-color="#C9A227"/>
+      <stop offset="100%" stop-color="#A07D14"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="224" ry="224" fill="url(#bgGrad)"/>
+
+  <!-- Subtle grid texture overlay -->
+  <rect width="1024" height="1024" rx="224" fill="none" stroke="#C9A227" stroke-width="1" opacity="0.04"/>
+
+  <!-- ── ICON MARK (centered, ~55% of canvas) ── -->
+
+  <!-- Outer head shadow/glow -->
+  <path
+    fill="none"
+    stroke="#C9A227"
+    stroke-width="6"
+    opacity="0.15"
+    d="M 512 158 C 672 158 732 228 718 360 L 688 660 C 672 752 620 792 512 792 C 404 792 352 752 336 660 L 306 360 C 292 228 352 158 512 158 Z"
+  />
+
+  <!-- Outer head frame (gold gradient) -->
+  <path fill="url(#goldGrad)" d="
+    M 512 168
+    C 670 168 730 238 716 368
+    L 686 656
+    C 670 748 618 788 512 788
+    C 406 788 354 748 338 656
+    L 308 368
+    C 294 238 354 168 512 168
+    Z
+  "/>
+
+  <!-- Inner pocket (dark) -->
+  <path fill="#0E1922" d="
+    M 512 220
+    C 652 220 690 282 676 372
+    L 648 648
+    C 636 720 596 744 512 744
+    C 428 744 388 720 376 648
+    L 348 372
+    C 334 282 372 220 512 220
+    Z
+  "/>
+
+  <!-- Mesh lines (gold, clipped to pocket) -->
+  <g clip-path="url(#pocketClipApp)">
+    <rect x="294" y="388" width="436" height="26" fill="url(#goldGrad)" rx="4"/>
+    <rect x="294" y="488" width="436" height="26" fill="url(#goldGrad)" rx="4"/>
+    <rect x="294" y="588" width="436" height="26" fill="url(#goldGrad)" rx="4"/>
+  </g>
+
+  <!-- Shaft -->
+  <rect x="488" y="788" width="48" height="68" rx="16" fill="url(#goldGrad)"/>
+</svg>

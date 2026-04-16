@@ -135,7 +135,7 @@ router.get('/:id', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
-    const { team_id, practice_date, drill_blocks, focus_tags, notes } = req.body;
+    const { team_id, practice_date, start_time, drill_blocks, focus_tags, notes } = req.body;
     const coachId = req.coachId;
 
     if (!team_id || !practice_date || !drill_blocks) {
@@ -147,6 +147,7 @@ router.post('/', async (req, res) => {
     const session = await createSession(coachId, {
       team_id,
       practice_date,
+      start_time: start_time || null,
       drill_blocks,
       focus_tags: focus_tags || [],
       notes: notes || '',
@@ -168,10 +169,11 @@ router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const coachId = req.coachId;
-    const { practice_date, drill_blocks, focus_tags, notes } = req.body;
+    const { practice_date, start_time, drill_blocks, focus_tags, notes } = req.body;
 
     const session = await updateSession(id, coachId, {
       practice_date,
+      start_time,
       drill_blocks,
       focus_tags,
       notes,

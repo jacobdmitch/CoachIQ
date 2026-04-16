@@ -36,7 +36,7 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
 
   const result = await query(
     `SELECT
-       g.id, g.opponent, g.game_date, g.location, g.format,
+       g.id, g.opponent, g.game_date, g.start_time, g.location, g.format,
        g.score_home, g.score_away, g.status, g.notes,
        CASE
          WHEN g.score_home > g.score_away THEN 'W'
@@ -79,16 +79,16 @@ router.get('/:id', authenticateToken, asyncHandler(async (req, res) => {
 // ─── POST / — schedule a game ─────────────────────────────────────────────────
 
 router.post('/', authenticateToken, asyncHandler(async (req, res) => {
-  const { teamId, opponent, gameDate, location, format = 'standard', notes } = req.body;
+  const { teamId, opponent, gameDate, startTime, location, format = 'standard', notes } = req.body;
   if (!teamId || !opponent) throw new AppError('teamId and opponent are required.', 400);
   if (!gameDate) throw new AppError('gameDate is required.', 400);
 
   await requireTeamAccess(req.coachId, teamId);
 
   const result = await query(
-    `INSERT INTO games (team_id, opponent, game_date, location, format, status, notes)
-     VALUES ($1, $2, $3, $4, $5, 'scheduled', $6) RETURNING *`,
-    [teamId, opponent, gameDate || null, location || null, format, notes || null]
+    `INSERT INTO games (team_id, opponent, game_date, start_time, location, format, status, notes)
+     VALUES ($1, $2, $3, $4, $5, $6, 'scheduled', $7) RETURNING *`,
+    [teamId, opponent, gameDate, startTime || null, location || null, format, notes || null]
   );
 
   logger.info(`Game scheduled: vs ${opponent} for team ${teamId}`);
@@ -104,8 +104,8 @@ router.patch('/:id', authenticateToken, asyncHandler(async (req, res) => {
   const game = gameResult.rows[0];
   await requireTeamAccess(req.coachId, game.team_id);
 
-  const allowed = ['opponent', 'game_date', 'location', 'format', 'score_home', 'score_away', 'status', 'notes'];
-  const keyMap  = { gameDate: 'game_date', scoreHome: 'score_home', scoreAway: 'score_away' };
+  const allowed = ['opponent', 'game_date', 'start_time', 'location', 'format', 'score_home', 'score_away', 'status', 'notes'];
+  const keyMap  = { gameDate: 'game_date', startTime: 'start_time', scoreHome: 'score_home', scoreAway: 'score_away' };
 
   const fields = [];
   const values = [];

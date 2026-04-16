@@ -38,6 +38,97 @@ const GENERAL_PROMPTS = [
   'Position analysis',
 ];
 
+/* ─── Markdown renderer ────────────────────────────────────────────────────── */
+
+// Apply **bold** inline formatting, returning an array of React nodes
+function applyBold(text, keyPrefix) {
+  const regex = /\*\*(.+?)\*\*/g;
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+  let i = 0;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
+    parts.push(<strong key={`${keyPrefix}-b${i++}`}>{match[1]}</strong>);
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+  return parts.length ? parts : [text];
+}
+
+// Render markdown text as React elements (no dangerouslySetInnerHTML)
+function MarkdownText({ text }) {
+  if (!text) return null;
+
+  const lines  = text.split('\n');
+  const output = [];
+  let listItems = [];
+
+  function flushList() {
+    if (!listItems.length) return;
+    output.push(
+      <ul key={`ul-${output.length}`} style={{ margin: '4px 0 8px 16px', padding: 0 }}>
+        {listItems}
+      </ul>
+    );
+    listItems = [];
+  }
+
+  lines.forEach((line, i) => {
+    if (line.startsWith('## ')) {
+      flushList();
+      output.push(
+        <div key={i} style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--color-gold)', marginTop: 10, marginBottom: 3 }}>
+          {line.slice(3)}
+        </div>
+      );
+    } else if (line.startsWith('# ')) {
+      flushList();
+      output.push(
+        <div key={i} style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-base)', color: 'var(--color-text-primary)', marginTop: 10, marginBottom: 3 }}>
+          {line.slice(2)}
+        </div>
+      );
+    } else if (/^[-*_]{3,}$/.test(line.trim())) {
+      flushList();
+      output.push(<hr key={i} style={{ border: 'none', borderTop: '1px solid var(--color-surface-3)', margin: '8px 0' }} />);
+    } else if (line.startsWith('- ') || line.startsWith('* ')) {
+      listItems.push(
+        <li key={i} style={{ fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', marginBottom: 2 }}>
+          {applyBold(line.slice(2), `li${i}`)}
+        </li>
+      );
+    } else if (!line.trim()) {
+      flushList();
+    } else {
+      flushList();
+      output.push(
+        <p key={i} style={{ fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', margin: '2px 0' }}>
+          {applyBold(line, `p${i}`)}
+        </p>
+      );
+    }
+  });
+
+  flushList();
+  return <>{output}</>;
+}
+
+// Build a readable body from a suggestion object regardless of field shape
+function suggestionBody(s) {
+  if (typeof s === 'string') return s;
+  if (s.description) return s.description;
+  if (s.reasoning)   return s.reasoning;
+  if (s.reason)      return s.reason;
+  const parts = [];
+  if (s.player_out) parts.push(`Out: ${s.player_out}`);
+  if (s.player_in)  parts.push(`In: ${s.player_in}`);
+  if (s.position)   parts.push(`Pos: ${s.position}`);
+  if (s.urgency)    parts.push(`Urgency: ${s.urgency}`);
+  return parts.length ? parts.join('  ·  ') : 'No details available';
+}
+
 /* ─── Message renderer ─────────────────────────────────────────────────────── */
 
 function Message({ role, text, suggestions = [] }) {
@@ -46,11 +137,15 @@ function Message({ role, text, suggestions = [] }) {
       <span className={`ai-message-role ${role}`}>
         {role === 'ai' ? 'Line Coach AI' : 'You'}
       </span>
-      {text && <p className="ai-message-body">{text}</p>}
+      {text && (
+        <div className="ai-message-body">
+          <MarkdownText text={text} />
+        </div>
+      )}
       {suggestions.map((s, i) => (
         <div key={i} className="ai-suggestion">
-          <p className="ai-suggestion-title">{s.type?.replace(/_/g, ' ') || 'Suggestion'}</p>
-          <p className="ai-suggestion-body">{s.description || s.reasoning || JSON.stringify(s)}</p>
+          <p className="ai-suggestion-title">{(s.type || 'Suggestion').replace(/_/g, ' ')}</p>
+          <p className="ai-suggestion-body">{suggestionBody(s)}</p>
         </div>
       ))}
     </div>

@@ -82,7 +82,7 @@ export async function listSessions(coachId, teamId, options = {}) {
 
     // Get paginated sessions (most recent first)
     const result = await query(
-      `SELECT id, team_id, practice_date, drill_blocks, focus_tags, notes, created_at, updated_at
+      `SELECT id, team_id, practice_date, start_time, drill_blocks, focus_tags, notes, created_at, updated_at
        FROM practice_sessions
        WHERE team_id = $1
        ORDER BY practice_date DESC
@@ -94,6 +94,7 @@ export async function listSessions(coachId, teamId, options = {}) {
       id: row.id,
       teamId: row.team_id,
       practiceDate: row.practice_date,
+      startTime: row.start_time,
       drillBlocks: row.drill_blocks || [],
       focusTags: row.focus_tags || [],
       notes: row.notes,
@@ -121,7 +122,7 @@ export async function listSessions(coachId, teamId, options = {}) {
 export async function getSession(sessionId, coachId) {
   try {
     const result = await query(
-      `SELECT ps.id, ps.team_id, ps.practice_date, ps.drill_blocks, ps.focus_tags, ps.notes, ps.created_at, ps.updated_at
+      `SELECT ps.id, ps.team_id, ps.practice_date, ps.start_time, ps.drill_blocks, ps.focus_tags, ps.notes, ps.created_at, ps.updated_at
        FROM practice_sessions ps
        JOIN teams t ON ps.team_id = t.id
        WHERE ps.id = $1 AND t.coach_id = $2`,
@@ -137,6 +138,7 @@ export async function getSession(sessionId, coachId) {
       id: row.id,
       teamId: row.team_id,
       practiceDate: row.practice_date,
+      startTime: row.start_time,
       drillBlocks: row.drill_blocks || [],
       focusTags: row.focus_tags || [],
       notes: row.notes,
@@ -154,7 +156,7 @@ export async function getSession(sessionId, coachId) {
  * Validates drill_blocks structure
  */
 export async function createSession(coachId, data) {
-  const { team_id, practice_date, drill_blocks, focus_tags, notes } = data;
+  const { team_id, practice_date, start_time, drill_blocks, focus_tags, notes } = data;
 
   try {
     // Verify coach owns the team
@@ -173,10 +175,10 @@ export async function createSession(coachId, data) {
     }
 
     const result = await query(
-      `INSERT INTO practice_sessions (team_id, practice_date, drill_blocks, focus_tags, notes)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, team_id, practice_date, drill_blocks, focus_tags, notes, created_at, updated_at`,
-      [team_id, practice_date, JSON.stringify(drill_blocks), focus_tags || [], notes || '']
+      `INSERT INTO practice_sessions (team_id, practice_date, start_time, drill_blocks, focus_tags, notes)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, team_id, practice_date, start_time, drill_blocks, focus_tags, notes, created_at, updated_at`,
+      [team_id, practice_date, start_time || null, JSON.stringify(drill_blocks), focus_tags || [], notes || '']
     );
 
     const row = result.rows[0];
@@ -184,6 +186,7 @@ export async function createSession(coachId, data) {
       id: row.id,
       teamId: row.team_id,
       practiceDate: row.practice_date,
+      startTime: row.start_time,
       drillBlocks: row.drill_blocks || [],
       focusTags: row.focus_tags || [],
       notes: row.notes,
@@ -201,7 +204,7 @@ export async function createSession(coachId, data) {
  * Validates ownership
  */
 export async function updateSession(sessionId, coachId, data) {
-  const { practice_date, drill_blocks, focus_tags, notes } = data;
+  const { practice_date, start_time, drill_blocks, focus_tags, notes } = data;
 
   try {
     // Verify coach owns the session
@@ -224,6 +227,12 @@ export async function updateSession(sessionId, coachId, data) {
     if (practice_date !== undefined) {
       updates.push(`practice_date = $${paramCount}`);
       values.push(practice_date);
+      paramCount++;
+    }
+
+    if (start_time !== undefined) {
+      updates.push(`start_time = $${paramCount}`);
+      values.push(start_time || null);
       paramCount++;
     }
 
@@ -259,7 +268,7 @@ export async function updateSession(sessionId, coachId, data) {
       `UPDATE practice_sessions
        SET ${updates.join(', ')}
        WHERE id = $${paramCount}
-       RETURNING id, team_id, practice_date, drill_blocks, focus_tags, notes, created_at, updated_at`,
+       RETURNING id, team_id, practice_date, start_time, drill_blocks, focus_tags, notes, created_at, updated_at`,
       values
     );
 
@@ -268,6 +277,7 @@ export async function updateSession(sessionId, coachId, data) {
       id: row.id,
       teamId: row.team_id,
       practiceDate: row.practice_date,
+      startTime: row.start_time,
       drillBlocks: row.drill_blocks || [],
       focusTags: row.focus_tags || [],
       notes: row.notes,

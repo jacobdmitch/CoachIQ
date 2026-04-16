@@ -262,9 +262,11 @@ export default function StagingPanel({
   onRemoveMove,
   onActivate,
   activating,
+  onAutoGenerateLines,
 }) {
-  const [mode,        setMode]        = useState(null); // 'individual' | 'line' | 'situation'
-  const [alertsDismissed, setAlertsDismissed] = useState(false);
+  const [mode,              setMode]              = useState(null); // 'individual' | 'line' | 'situation'
+  const [alertsDismissed,   setAlertsDismissed]   = useState(false);
+  const [generatingLines,   setGeneratingLines]   = useState(false);
 
   const subQueue = liveState?.subQueue || [];
   const totalMoves = subQueue.reduce((n, e) => n + e.moves.length, 0);
@@ -377,9 +379,26 @@ export default function StagingPanel({
                 Swap Line
               </p>
             </div>
-            {lines.length === 0 && (
-              <p style={{ padding: 'var(--sp-6)', fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-sm)', color: 'var(--color-text-subtle)', textAlign: 'center' }}>
-                No lines saved. Add lines in Roster settings.
+            {lines.length === 0 && !generatingLines && (
+              <div style={{ padding: 'var(--sp-5)', textAlign: 'center' }}>
+                <p style={{ fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-sm)', color: 'var(--color-text-subtle)', marginBottom: 'var(--sp-4)' }}>
+                  No lines saved. Generate defaults from your roster?
+                </p>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={async () => {
+                    setGeneratingLines(true);
+                    try { await onAutoGenerateLines?.(); } finally { setGeneratingLines(false); }
+                  }}
+                >
+                  Generate Lines
+                </Button>
+              </div>
+            )}
+            {generatingLines && (
+              <p style={{ padding: 'var(--sp-6)', fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', textAlign: 'center' }}>
+                Building lines from roster…
               </p>
             )}
             {['attack', 'midfield', 'defense'].map(group => {
@@ -437,6 +456,11 @@ export default function StagingPanel({
                 Load Situation
               </p>
             </div>
+            {lines.length === 0 && (
+              <p style={{ padding: 'var(--sp-3) var(--sp-5)', fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-xs)', color: 'var(--color-gold)', background: 'var(--color-gold-muted)', borderBottom: '1px solid var(--color-gold-border)' }}>
+                No lines saved — situations will use current field players.
+              </p>
+            )}
             {situationOptions.map(s => (
               <button
                 key={s.key}

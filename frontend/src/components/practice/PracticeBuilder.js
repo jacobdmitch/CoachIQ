@@ -2,9 +2,14 @@ import React, { useState, useEffect } from 'react';
 import api from '../../config/api.js';
 import DrillCard from './DrillCard.js';
 
+function formatTag(tag) {
+  return tag.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
 const PracticeBuilder = ({ session, teamId, onSave, onCancel }) => {
   // Form state
   const [practiceDate, setPracticeDate] = useState(session?.practiceDate || '');
+  const [practiceTime, setPracticeTime] = useState(session?.startTime || '');
   const [notes, setNotes] = useState(session?.notes || '');
   const [drillBlocks, setDrillBlocks] = useState(session?.drillBlocks || []);
   const [drillLibrary, setDrillLibrary] = useState([]);
@@ -148,6 +153,7 @@ const PracticeBuilder = ({ session, teamId, onSave, onCancel }) => {
       const payload = {
         team_id: teamId,
         practice_date: practiceDate,
+        start_time: practiceTime || null,
         drill_blocks: drillBlocks,
         focus_tags: allFocusTags,
         notes: notes,
@@ -461,13 +467,26 @@ const PracticeBuilder = ({ session, teamId, onSave, onCancel }) => {
 
       {/* Date and Metadata */}
       <div style={styles.formSection}>
-        <label style={styles.label}>Practice Date *</label>
-        <input
-          type="date"
-          style={styles.input}
-          value={practiceDate}
-          onChange={(e) => setPracticeDate(e.target.value)}
-        />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px', gap: '12px', marginBottom: '0' }}>
+          <div>
+            <label style={styles.label}>Practice Date *</label>
+            <input
+              type="date"
+              style={styles.input}
+              value={practiceDate}
+              onChange={(e) => setPracticeDate(e.target.value)}
+            />
+          </div>
+          <div>
+            <label style={styles.label}>Start Time <span style={{ fontWeight: 400, color: '#999' }}>(opt.)</span></label>
+            <input
+              type="time"
+              style={styles.input}
+              value={practiceTime}
+              onChange={(e) => setPracticeTime(e.target.value)}
+            />
+          </div>
+        </div>
 
         <label style={{ ...styles.label, marginTop: '16px' }}>Notes</label>
         <textarea
@@ -501,7 +520,7 @@ const PracticeBuilder = ({ session, teamId, onSave, onCancel }) => {
           <div style={styles.focusTags}>
             {allFocusTags.map((tag) => (
               <span key={tag} style={styles.focusTag}>
-                {tag}
+                {formatTag(tag)}
               </span>
             ))}
           </div>
@@ -541,7 +560,7 @@ const PracticeBuilder = ({ session, teamId, onSave, onCancel }) => {
 
             <div style={styles.drillBlockContent}>
               <div style={styles.drillBlockHeader}>
-                <div style={styles.drillBlockName}>{block.drill_name}</div>
+                <div style={styles.drillBlockName}>{block.drill_name || block.name || 'Unnamed Drill'}</div>
                 <button
                   style={styles.removeButton}
                   onClick={() => handleRemoveBlock(block.id)}
@@ -574,7 +593,7 @@ const PracticeBuilder = ({ session, teamId, onSave, onCancel }) => {
                 <div style={styles.focusTags}>
                   {block.skill_tags.map((tag) => (
                     <span key={tag} style={styles.focusTag}>
-                      {tag}
+                      {formatTag(tag)}
                     </span>
                   ))}
                 </div>

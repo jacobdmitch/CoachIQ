@@ -3,6 +3,9 @@ import api from '../../config/api.js';
 import { useAuth } from '../../context/AuthContext.js';
 import PracticeBuilder from './PracticeBuilder.js';
 import PracticeAnalysis from './PracticeAnalysis.js';
+import { formatDateTime, formatTag } from '../../utils/formatters.js';
+
+const PRACTICE_DATE_OPTS = { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' };
 
 const PracticeCalendar = () => {
   const { team } = useAuth();
@@ -134,7 +137,8 @@ const PracticeCalendar = () => {
       maxWidth: '1200px',
       margin: '0 auto',
       minHeight: '100vh',
-      backgroundColor: '#f5f5f5',
+      backgroundColor: 'var(--color-surface-0)',
+      color: 'var(--color-text-primary)',
     },
     header: {
       display: 'flex',
@@ -147,7 +151,7 @@ const PracticeCalendar = () => {
     title: {
       fontSize: '28px',
       fontWeight: 'bold',
-      color: '#333',
+      color: 'var(--color-text-primary)',
       margin: 0,
     },
     buttonGroup: {
@@ -165,56 +169,56 @@ const PracticeCalendar = () => {
       whiteSpace: 'nowrap',
     },
     primaryButton: {
-      backgroundColor: '#1976D2',
-      color: '#fff',
+      backgroundColor: 'var(--color-gold)',
+      color: 'var(--color-surface-0)',
     },
     secondaryButton: {
-      backgroundColor: '#f5f5f5',
-      color: '#333',
-      border: '1px solid #ddd',
+      backgroundColor: 'var(--color-surface-2)',
+      color: 'var(--color-text-primary)',
+      border: '1px solid var(--color-border)',
     },
     loading: {
       textAlign: 'center',
       padding: '32px',
-      color: '#666',
+      color: 'var(--color-text-muted)',
       fontSize: '16px',
     },
     error: {
-      backgroundColor: '#FFEBEE',
-      color: '#C62828',
+      backgroundColor: 'rgba(239,68,68,0.1)',
+      color: 'var(--color-red)',
       padding: '16px',
       borderRadius: '4px',
       marginBottom: '16px',
       fontSize: '14px',
+      border: '1px solid rgba(239,68,68,0.3)',
     },
     sessionsList: {
       display: 'grid',
       gap: '12px',
     },
     sessionCard: {
-      backgroundColor: '#fff',
-      border: '1px solid #ddd',
+      backgroundColor: 'var(--color-surface-1)',
+      border: '1px solid var(--color-border)',
       borderRadius: '8px',
       padding: '16px',
       cursor: 'pointer',
-      transition: 'box-shadow 0.2s, transform 0.2s',
-      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+      transition: 'border-color 0.2s, transform 0.2s',
     },
     sessionCardHover: {
-      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+      borderColor: 'var(--color-gold-border)',
       transform: 'translateY(-2px)',
     },
     sessionDate: {
       fontSize: '18px',
       fontWeight: 'bold',
-      color: '#333',
+      color: 'var(--color-text-primary)',
       marginBottom: '8px',
     },
     sessionMeta: {
       display: 'flex',
       gap: '16px',
       fontSize: '14px',
-      color: '#666',
+      color: 'var(--color-text-muted)',
       marginBottom: '12px',
       flexWrap: 'wrap',
     },
@@ -231,18 +235,19 @@ const PracticeCalendar = () => {
     },
     chip: {
       display: 'inline-block',
-      backgroundColor: '#E3F2FD',
-      color: '#1976D2',
+      backgroundColor: 'var(--color-surface-2)',
+      color: 'var(--color-text-secondary)',
       padding: '4px 8px',
       borderRadius: '4px',
       fontSize: '12px',
       fontWeight: '500',
+      border: '1px solid var(--color-border)',
     },
     sessionActions: {
       display: 'flex',
       gap: '8px',
       marginTop: '12px',
-      borderTop: '1px solid #eee',
+      borderTop: '1px solid var(--color-border)',
       paddingTop: '12px',
     },
     actionButton: {
@@ -254,19 +259,21 @@ const PracticeCalendar = () => {
       fontWeight: '500',
     },
     viewButton: {
-      backgroundColor: '#E3F2FD',
-      color: '#1976D2',
+      backgroundColor: 'var(--color-surface-2)',
+      color: 'var(--color-text-primary)',
+      border: '1px solid var(--color-border)',
     },
     editButton: {
-      backgroundColor: '#FFF3E0',
-      color: '#E65100',
+      backgroundColor: 'var(--color-gold-muted)',
+      color: 'var(--color-gold)',
+      border: '1px solid var(--color-gold-border)',
     },
     emptyState: {
       textAlign: 'center',
       padding: '48px 16px',
-      backgroundColor: '#fff',
+      backgroundColor: 'var(--color-surface-1)',
       borderRadius: '8px',
-      border: '1px dashed #ddd',
+      border: '1px dashed var(--color-border)',
     },
     emptyStateIcon: {
       fontSize: '48px',
@@ -276,20 +283,20 @@ const PracticeCalendar = () => {
     emptyStateTitle: {
       fontSize: '18px',
       fontWeight: '600',
-      color: '#666',
+      color: 'var(--color-text-muted)',
       marginBottom: '8px',
     },
     emptyStateText: {
       fontSize: '14px',
-      color: '#999',
+      color: 'var(--color-text-subtle)',
       marginBottom: '16px',
     },
     loadMoreButton: {
       display: 'block',
       margin: '32px auto 16px',
       padding: '12px 24px',
-      backgroundColor: '#1976D2',
-      color: '#fff',
+      backgroundColor: 'var(--color-gold)',
+      color: 'var(--color-surface-0)',
       border: 'none',
       borderRadius: '4px',
       fontSize: '14px',
@@ -337,7 +344,7 @@ const PracticeCalendar = () => {
       <div style={styles.container}>
         <div style={styles.header}>
           <h1 style={styles.title}>
-            Practice Session - {selectedSession.practiceDate}
+            Practice Session — {formatDateTime(selectedSession.practiceDate, selectedSession.startTime, PRACTICE_DATE_OPTS)}
           </h1>
           <div style={styles.buttonGroup}>
             <button
@@ -356,8 +363,8 @@ const PracticeCalendar = () => {
         </div>
 
         {/* Session Details */}
-        <div style={{ backgroundColor: '#fff', padding: '16px', borderRadius: '8px', marginBottom: '16px' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '12px', color: '#333' }}>
+        <div style={{ backgroundColor: 'var(--color-surface-1)', padding: '16px', borderRadius: '8px', marginBottom: '16px', border: '1px solid var(--color-border)' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '12px', color: 'var(--color-text-primary)' }}>
             Drills ({selectedSession.drillBlocks.length})
           </h2>
 
@@ -366,29 +373,29 @@ const PracticeCalendar = () => {
               key={block.id}
               style={{
                 padding: '12px',
-                backgroundColor: '#f9f9f9',
+                backgroundColor: 'var(--color-surface-2)',
                 borderRadius: '4px',
                 marginBottom: '8px',
-                border: '1px solid #eee',
+                border: '1px solid var(--color-border)',
               }}
             >
-              <div style={{ fontWeight: '600', marginBottom: '4px', color: '#333' }}>
-                {idx + 1}. {block.drill_name}
+              <div style={{ fontWeight: '600', marginBottom: '4px', color: 'var(--color-text-primary)' }}>
+                {idx + 1}. {block.drill_name || block.name || '—'}
               </div>
-              <div style={{ fontSize: '13px', color: '#666', marginBottom: '4px' }}>
+              <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>
                 Duration: {block.duration_minutes} min
               </div>
               {block.skill_tags && block.skill_tags.length > 0 && (
                 <div style={styles.chipContainer}>
                   {block.skill_tags.map((tag) => (
                     <span key={tag} style={styles.chip}>
-                      {tag}
+                      {formatTag(tag)}
                     </span>
                   ))}
                 </div>
               )}
               {block.notes && (
-                <div style={{ fontSize: '13px', color: '#555', marginTop: '6px', fontStyle: 'italic' }}>
+                <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginTop: '6px', fontStyle: 'italic' }}>
                   Notes: {block.notes}
                 </div>
               )}
@@ -396,25 +403,25 @@ const PracticeCalendar = () => {
           ))}
 
           {selectedSession.notes && (
-            <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #eee' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#333' }}>
+            <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--color-border)' }}>
+              <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: 'var(--color-text-primary)' }}>
                 Session Notes
               </h3>
-              <p style={{ color: '#555', fontSize: '14px', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
+              <p style={{ color: 'var(--color-text-secondary)', fontSize: '14px', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
                 {selectedSession.notes}
               </p>
             </div>
           )}
 
           {selectedSession.focusTags && selectedSession.focusTags.length > 0 && (
-            <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #eee' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#333' }}>
+            <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--color-border)' }}>
+              <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: 'var(--color-text-primary)' }}>
                 Focus Tags
               </h3>
               <div style={styles.chipContainer}>
                 {selectedSession.focusTags.map((tag) => (
                   <span key={tag} style={styles.chip}>
-                    {tag}
+                    {formatTag(tag)}
                   </span>
                 ))}
               </div>
@@ -481,12 +488,7 @@ const PracticeCalendar = () => {
                 }}
               >
                 <div style={styles.sessionDate}>
-                  {new Date(session.practiceDate).toLocaleDateString('en-US', {
-                    weekday: 'long',
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                  })}
+                  {formatDateTime(session.practiceDate, session.startTime, PRACTICE_DATE_OPTS)}
                 </div>
 
                 <div style={styles.sessionMeta}>
@@ -511,7 +513,7 @@ const PracticeCalendar = () => {
                   <div style={styles.chipContainer}>
                     {session.focusTags.slice(0, 5).map((tag) => (
                       <span key={tag} style={styles.chip}>
-                        {tag}
+                        {formatTag(tag)}
                       </span>
                     ))}
                     {session.focusTags.length > 5 && (

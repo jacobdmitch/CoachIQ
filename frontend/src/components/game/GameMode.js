@@ -12,6 +12,7 @@ import Button from '../common/Button';
 import GameSetup from './GameSetup';
 import StagingPanel from './StagingPanel';
 import AICoachPanel from '../ai/AICoachPanel';
+import { formatDateTime } from '../../utils/formatters';
 
 const PERIODS = ['1st', '2nd', '3rd', '4th', 'OT'];
 
@@ -34,6 +35,7 @@ function GamePicker({ teamId }) {
   const [opponent, setOpponent] = useState('');
   const [format,   setFormat]   = useState('standard');
   const [gameDate, setGameDate] = useState(new Date().toISOString().split('T')[0]);
+  const [gameTime, setGameTime] = useState('');
 
   const upcoming = games.filter(g => g.status !== 'completed');
 
@@ -42,7 +44,7 @@ function GamePicker({ teamId }) {
     if (!opponent.trim()) return;
     setCreating(true);
     try {
-      const game = await scheduleGame({ opponent: opponent.trim(), gameDate, format });
+      const game = await scheduleGame({ opponent: opponent.trim(), gameDate, startTime: gameTime || undefined, format });
       navigate(`/game/${game.id}`);
     } finally {
       setCreating(false);
@@ -72,7 +74,7 @@ function GamePicker({ teamId }) {
       <p className="section-heading">New Game</p>
       <div className="card" style={{ marginBottom: 'var(--sp-8)' }}>
         <form onSubmit={handleCreate}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px', gap: 'var(--sp-3)', marginBottom: 'var(--sp-4)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px 130px', gap: 'var(--sp-3)', marginBottom: 'var(--sp-4)' }}>
             <div>
               <label style={{ display: 'block', fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: '10px', letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 'var(--sp-1)' }}>
                 Opponent
@@ -93,6 +95,17 @@ function GamePicker({ teamId }) {
                 type="date"
                 value={gameDate}
                 onChange={e => setGameDate(e.target.value)}
+                style={{ width: '100%', boxSizing: 'border-box' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: '10px', letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 'var(--sp-1)' }}>
+                Time <span style={{ fontWeight: 300, textTransform: 'none', letterSpacing: 0 }}>(opt.)</span>
+              </label>
+              <input
+                type="time"
+                value={gameTime}
+                onChange={e => setGameTime(e.target.value)}
                 style={{ width: '100%', boxSizing: 'border-box' }}
               />
             </div>
@@ -143,7 +156,7 @@ function GamePicker({ teamId }) {
               </p>
               {g.game_date && (
                 <p style={{ fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginTop: 2 }}>
-                  {new Date(g.game_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  {formatDateTime(g.game_date, g.start_time, { weekday: 'short', month: 'short', day: 'numeric' })}
                 </p>
               )}
             </div>
@@ -308,21 +321,51 @@ function ShotClock({ initialSeconds }) {
 // ─── Stat logging sheet ───────────────────────────────────────────────────────
 
 const STAT_EVENTS = [
-  { type: 'goal',           label: 'Goal',        color: 'var(--color-gold)' },
-  { type: 'assist',         label: 'Assist',      color: 'var(--color-gold)' },
-  { type: 'shot',           label: 'Shot',        color: 'var(--color-blue)' },
-  { type: 'ground_ball',    label: 'Ground Ball', color: 'var(--color-green)' },
-  { type: 'turnover',       label: 'Turnover',    color: 'var(--color-red)' },
-  { type: 'caused_turnover',label: 'Caused TO',   color: 'var(--color-green)' },
-  { type: 'save',           label: 'Save',        color: 'var(--color-blue)' },
+  { type: 'goal',            label: 'Goal',        color: 'var(--color-gold)' },
+  { type: 'assist',          label: 'Assist',      color: 'var(--color-gold)' },
+  { type: 'shot',            label: 'Shot',        color: 'var(--color-blue)' },
+  { type: 'ground_ball',     label: 'Ground Ball', color: 'var(--color-green)' },
+  { type: 'turnover',        label: 'Turnover',    color: 'var(--color-red)' },
+  { type: 'caused_turnover', label: 'Caused TO',   color: 'var(--color-green)' },
+  { type: 'save',            label: 'Save',        color: 'var(--color-blue)' },
 ];
 
+const PENALTY_TYPES = [
+  { type: 'personal_foul',       label: 'Personal Foul',         seconds: 30 },
+  { type: 'technical_foul',      label: 'Technical Foul',        seconds: 30 },
+  { type: 'unnecessary_rough',   label: 'Unnecessary Roughness', seconds: 60 },
+  { type: 'illegal_body_check',  label: 'Illegal Body Check',    seconds: 60 },
+  { type: 'slashing',            label: 'Slashing',              seconds: 60 },
+  { type: 'tripping',            label: 'Tripping',              seconds: 30 },
+  { type: 'pushing',             label: 'Pushing',               seconds: 30 },
+  { type: 'holding',             label: 'Holding',               seconds: 30 },
+  { type: 'interference',        label: 'Interference',          seconds: 30 },
+  { type: 'illegal_crosse',      label: 'Illegal Crosse',        seconds: 30 },
+  { type: 'unsportsmanlike',     label: 'Unsportsmanlike',       seconds: 60, nonReleasable: true },
+  { type: 'expulsion',           label: 'Expulsion',             seconds: 180, nonReleasable: true },
+];
+
+function fmtPenaltyDuration(seconds) {
+  return seconds >= 60 ? `${seconds / 60} min` : `${seconds}s`;
+}
+
+// step: 'player' → 'event' → 'penalty_type' → 'penalty_confirm'
 function StatLogger({ gameId, athletes, period, clockSeconds, onClose }) {
-  const toast             = useToast();
-  const [selected, setSelected] = useState(null); // athleteId
-  const [logging,  setLogging]  = useState(false);
+  const toast = useToast();
+  const [step,          setStep]          = useState('player');
+  const [selected,      setSelected]      = useState(null); // athleteId
+  const [penaltyType,   setPenaltyType]   = useState(null); // PENALTY_TYPES entry
+  const [penaltySeconds, setPenaltySeconds] = useState(0);
+  const [logging,       setLogging]       = useState(false);
 
   const fieldPlayers = athletes || [];
+
+  function resetToPlayer() {
+    setStep('player');
+    setSelected(null);
+    setPenaltyType(null);
+    setPenaltySeconds(0);
+  }
 
   async function logStat(eventType) {
     if (!selected || !gameId) return;
@@ -334,13 +377,40 @@ function StatLogger({ gameId, athletes, period, clockSeconds, onClose }) {
         metadata:  { period, clockSeconds },
       });
       toast.success(`${STAT_EVENTS.find(e => e.type === eventType)?.label || eventType} logged`);
-      setSelected(null);
+      resetToPlayer();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to log stat');
     } finally {
       setLogging(false);
     }
   }
+
+  async function logPenalty() {
+    if (!selected || !penaltyType || !gameId) return;
+    setLogging(true);
+    try {
+      await apiClient.post(`/game-live/${gameId}/event`, {
+        eventType: 'PENALTY',
+        athleteId: selected,
+        metadata:  { period, clockSeconds, penaltyType: penaltyType.type, penaltySeconds, nonReleasable: penaltyType.nonReleasable || false },
+      });
+      toast.success(`Penalty: ${penaltyType.label} (${fmtPenaltyDuration(penaltySeconds)}) logged`);
+      resetToPlayer();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to log penalty');
+    } finally {
+      setLogging(false);
+    }
+  }
+
+  const headings = {
+    player:          'Tap a player',
+    event:           'Tap the event to log',
+    penalty_type:    'Select penalty type',
+    penalty_confirm: 'Confirm penalty',
+  };
+
+  const selectedAthlete = fieldPlayers.find(p => p.id === selected);
 
   return (
     <div style={{
@@ -359,18 +429,27 @@ function StatLogger({ gameId, athletes, period, clockSeconds, onClose }) {
         background: 'var(--color-surface-0)',
         borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0',
         padding: 'var(--sp-5)',
-        maxHeight: '70dvh',
+        maxHeight: '75dvh',
         overflowY: 'auto',
       }}>
-        {/* Handle */}
-        <div style={{ width: 40, height: 4, background: 'var(--color-surface-3)', borderRadius: 2, margin: '0 auto var(--sp-5)' }} />
+        {/* Handle + close */}
+        <div style={{ position: 'relative', marginBottom: 'var(--sp-5)' }}>
+          <div style={{ width: 40, height: 4, background: 'var(--color-surface-3)', borderRadius: 2, margin: '0 auto' }} />
+          <button
+            onClick={onClose}
+            style={{ position: 'absolute', right: 0, top: -10, background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 22, lineHeight: 1, padding: 4 }}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
 
         <p className="section-heading" style={{ marginBottom: 'var(--sp-4)' }}>
-          {selected ? 'Tap the event to log' : 'Tap a player'}
+          {headings[step]}
         </p>
 
-        {/* Player grid */}
-        {!selected && (
+        {/* ── Step: player ── */}
+        {step === 'player' && (
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
@@ -380,7 +459,7 @@ function StatLogger({ gameId, athletes, period, clockSeconds, onClose }) {
             {fieldPlayers.map(a => (
               <button
                 key={a.id}
-                onClick={() => setSelected(a.id)}
+                onClick={() => { setSelected(a.id); setStep('event'); }}
                 style={{
                   padding: 'var(--sp-3)',
                   borderRadius: 'var(--radius-md)',
@@ -405,72 +484,167 @@ function StatLogger({ gameId, athletes, period, clockSeconds, onClose }) {
           </div>
         )}
 
-        {/* Event buttons — shown after player is selected */}
-        {selected && (
-          <>
+        {/* Selected player bar — shown on event / penalty steps */}
+        {step !== 'player' && selectedAthlete && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 'var(--sp-3)',
+            marginBottom: 'var(--sp-4)',
+            padding: 'var(--sp-3)',
+            background: 'var(--color-gold-muted)',
+            border: '1px solid var(--color-gold-border)',
+            borderRadius: 'var(--radius-md)',
+          }}>
+            <span style={{ fontFamily: 'var(--font-stats)', fontSize: 'var(--text-lg)', color: 'var(--color-gold)' }}>
+              {selectedAthlete.jersey_number}
+            </span>
+            <span style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)' }}>
+              {selectedAthlete.first_name} {selectedAthlete.last_name}
+            </span>
+            <button
+              onClick={resetToPlayer}
+              style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 18 }}
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        {/* ── Step: event ── */}
+        {step === 'event' && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 'var(--sp-3)' }}>
+            {STAT_EVENTS.map(ev => (
+              <button
+                key={ev.type}
+                onClick={() => logStat(ev.type)}
+                disabled={logging}
+                style={{
+                  padding: 'var(--sp-4)',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'var(--color-surface-1)',
+                  border: '1px solid var(--color-surface-2)',
+                  cursor: logging ? 'wait' : 'pointer',
+                  fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-sm)',
+                  color: ev.color, textAlign: 'center', minHeight: 52,
+                  transition: 'all var(--ease-fast)', opacity: logging ? 0.5 : 1,
+                }}
+                onPointerDown={e => { if (!logging) e.currentTarget.style.transform = 'scale(0.95)'; }}
+                onPointerUp={e => e.currentTarget.style.transform = 'scale(1)'}
+                onPointerLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+              >
+                {ev.label}
+              </button>
+            ))}
+            {/* Penalty entry point */}
+            <button
+              onClick={() => setStep('penalty_type')}
+              disabled={logging}
+              style={{
+                padding: 'var(--sp-4)',
+                borderRadius: 'var(--radius-md)',
+                background: 'rgba(239,68,68,0.08)',
+                border: '1px solid rgba(239,68,68,0.3)',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-sm)',
+                color: 'var(--color-red)', textAlign: 'center', minHeight: 52,
+                transition: 'all var(--ease-fast)', opacity: logging ? 0.5 : 1,
+              }}
+              onPointerDown={e => e.currentTarget.style.transform = 'scale(0.95)'}
+              onPointerUp={e => e.currentTarget.style.transform = 'scale(1)'}
+              onPointerLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+            >
+              Penalty
+            </button>
+          </div>
+        )}
+
+        {/* ── Step: penalty_type ── */}
+        {step === 'penalty_type' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
+            {PENALTY_TYPES.map(pt => (
+              <button
+                key={pt.type}
+                onClick={() => { setPenaltyType(pt); setPenaltySeconds(pt.seconds); setStep('penalty_confirm'); }}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: 'var(--sp-3) var(--sp-4)',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'var(--color-surface-1)',
+                  border: '1px solid var(--color-surface-2)',
+                  cursor: 'pointer', textAlign: 'left',
+                  transition: 'all var(--ease-fast)',
+                }}
+                onPointerDown={e => e.currentTarget.style.background = 'var(--color-surface-2)'}
+                onPointerUp={e => e.currentTarget.style.background = 'var(--color-surface-1)'}
+                onPointerLeave={e => e.currentTarget.style.background = 'var(--color-surface-1)'}
+              >
+                <span style={{ fontFamily: 'var(--font-body)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)' }}>
+                  {pt.label}{pt.nonReleasable ? <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--color-red)' }}>NR</span> : null}
+                </span>
+                <span style={{ fontFamily: 'var(--font-stats)', fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', flexShrink: 0, marginLeft: 'var(--sp-3)' }}>
+                  {fmtPenaltyDuration(pt.seconds)}
+                </span>
+              </button>
+            ))}
+            <p style={{ fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 10, color: 'var(--color-text-subtle)', textAlign: 'right', marginTop: 'var(--sp-1)' }}>
+              NR = Non-releasable
+            </p>
+          </div>
+        )}
+
+        {/* ── Step: penalty_confirm ── */}
+        {step === 'penalty_confirm' && penaltyType && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 'var(--sp-3)',
-              marginBottom: 'var(--sp-4)',
-              padding: 'var(--sp-3)',
-              background: 'var(--color-gold-muted)',
-              border: '1px solid var(--color-gold-border)',
+              padding: 'var(--sp-4)',
+              background: 'rgba(239,68,68,0.08)',
+              border: '1px solid rgba(239,68,68,0.25)',
               borderRadius: 'var(--radius-md)',
             }}>
-              {(() => {
-                const a = fieldPlayers.find(p => p.id === selected);
-                return a ? (
-                  <>
-                    <span style={{ fontFamily: 'var(--font-stats)', fontSize: 'var(--text-lg)', color: 'var(--color-gold)' }}>
-                      {a.jersey_number}
-                    </span>
-                    <span style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)' }}>
-                      {a.first_name} {a.last_name}
-                    </span>
-                  </>
-                ) : null;
-              })()}
-              <button
-                onClick={() => setSelected(null)}
-                style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 18 }}
-              >
-                ×
-              </button>
+              <p style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-base)', color: 'var(--color-text-primary)', marginBottom: 'var(--sp-3)' }}>
+                {penaltyType.label}
+                {penaltyType.nonReleasable && (
+                  <span style={{ marginLeft: 8, padding: '2px 6px', borderRadius: 4, background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--color-red)', fontSize: 10, fontWeight: 700 }}>
+                    Non-releasable
+                  </span>
+                )}
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
+                <span style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>
+                  Duration
+                </span>
+                <button
+                  onClick={() => setPenaltySeconds(s => Math.max(30, s - 30))}
+                  style={{ padding: '4px 10px', background: 'var(--color-surface-2)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', color: 'var(--color-text-primary)', fontWeight: 700 }}
+                >
+                  −
+                </button>
+                <span style={{ fontFamily: 'var(--font-stats)', fontSize: 'var(--text-lg)', color: 'var(--color-red)', minWidth: 56, textAlign: 'center' }}>
+                  {fmtPenaltyDuration(penaltySeconds)}
+                </span>
+                <button
+                  onClick={() => setPenaltySeconds(s => s + 30)}
+                  style={{ padding: '4px 10px', background: 'var(--color-surface-2)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', color: 'var(--color-text-primary)', fontWeight: 700 }}
+                >
+                  +
+                </button>
+              </div>
             </div>
 
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))',
-              gap: 'var(--sp-3)',
-            }}>
-              {STAT_EVENTS.map(ev => (
-                <button
-                  key={ev.type}
-                  onClick={() => logStat(ev.type)}
-                  disabled={logging}
-                  style={{
-                    padding: 'var(--sp-4)',
-                    borderRadius: 'var(--radius-md)',
-                    background: 'var(--color-surface-1)',
-                    border: `1px solid var(--color-surface-2)`,
-                    cursor: logging ? 'wait' : 'pointer',
-                    fontFamily: 'var(--font-body)',
-                    fontWeight: 700,
-                    fontSize: 'var(--text-sm)',
-                    color: ev.color,
-                    textAlign: 'center',
-                    minHeight: 52,
-                    transition: 'all var(--ease-fast)',
-                    opacity: logging ? 0.5 : 1,
-                  }}
-                  onPointerDown={e => { if (!logging) e.currentTarget.style.transform = 'scale(0.95)'; }}
-                  onPointerUp={e => e.currentTarget.style.transform = 'scale(1)'}
-                  onPointerLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                >
-                  {ev.label}
-                </button>
-              ))}
+            <div style={{ display: 'flex', gap: 'var(--sp-3)' }}>
+              <Button variant="ghost" size="sm" onClick={() => setStep('penalty_type')} style={{ flex: 1 }}>
+                Back
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={logPenalty}
+                disabled={logging}
+                style={{ flex: 2, background: 'var(--color-red)', borderColor: 'var(--color-red)' }}
+              >
+                {logging ? 'Logging…' : 'Log Penalty'}
+              </Button>
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>
@@ -604,7 +778,7 @@ export default function GameMode() {
     addToQueue, removeFromQueue, removeMoveFromQueue, activateQueue,
   } = useGameSocket(gameId, token);
 
-  const { lines }   = useLines(team?.id);
+  const { lines, createLine } = useLines(team?.id);
   const { athletes } = useRoster(team?.id);
 
   const [homeScore,      setHomeScore]      = useState(0);
@@ -631,6 +805,39 @@ export default function GameMode() {
       setClockRunning(liveState.clockRunning ?? false);
     }
   }, [liveState]);
+
+  // Auto-generate default lines grouped by position when none exist
+  async function autoGenerateLines() {
+    if (!athletes || athletes.length === 0) return;
+
+    function avgSkill(a) {
+      const vals = [
+        a.skill_shooting, a.skill_passing, a.skill_dodging, a.skill_field_awareness,
+        a.skill_defense, a.skill_ground_balls, a.skill_transition,
+      ].filter(v => v != null);
+      return vals.length ? vals.reduce((s, v) => s + Number(v), 0) / vals.length : 0;
+    }
+
+    const active = athletes.filter(a => a.status !== 'injured');
+
+    const groups = {
+      attack:   active.filter(a => a.primary_position === 'Attack').sort((a, b) => avgSkill(b) - avgSkill(a)).slice(0, 3),
+      midfield: active.filter(a => a.primary_position === 'Midfield' || a.primary_position === 'FOGO').sort((a, b) => avgSkill(b) - avgSkill(a)).slice(0, 3),
+      defense:  active.filter(a => a.primary_position === 'Defense' || a.primary_position === 'Goalie').sort((a, b) => avgSkill(b) - avgSkill(a)).slice(0, 4),
+    };
+
+    await Promise.all(
+      Object.entries(groups)
+        .filter(([, players]) => players.length > 0)
+        .map(([group, players]) =>
+          createLine({
+            name: `Auto ${group.charAt(0).toUpperCase() + group.slice(1)}`,
+            positionGroup: group,
+            playerIds: players.map(p => p.id),
+          }).catch(() => null) // don't fail the whole batch if one group errors
+        )
+    );
+  }
 
   // Poll playtime equity every 60s and surface HIGH-urgency flags
   useEffect(() => {
@@ -952,6 +1159,7 @@ export default function GameMode() {
           onRemoveMove={removeMoveFromQueue}
           onActivate={activateQueue}
           activating={activating}
+          onAutoGenerateLines={autoGenerateLines}
         />
       </div>
 
