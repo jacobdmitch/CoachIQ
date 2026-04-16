@@ -163,8 +163,10 @@ export default function PlayEditor({ play, teamId, onSave, onCancel }) {
   const [notes,        setNotes]        = useState(play?.notes         || '');
   const [hoveredPlayer, setHoveredPlayer] = useState(null);
 
-  const canvasRef    = useRef(null); // attached to the container div (same size as SVG)
-  const draggingRef  = useRef(null); // { playerId, lastX, lastY } during an active drag
+  const canvasRef       = useRef(null); // attached to the container div (same size as SVG)
+  const draggingRef     = useRef(null); // { playerId, lastX, lastY } during an active drag
+  const playerElRefs    = useRef({});   // { playerId: <g> DOM element } for direct DOM drag updates
+  const dragRafRef      = useRef(null); // requestAnimationFrame handle during drag
 
   // ─── Coordinate helpers ─────────────────────────────────
 
@@ -211,7 +213,24 @@ export default function PlayEditor({ play, teamId, onSave, onCancel }) {
       const { x, y } = toFraction(e.clientX, e.clientY);
       draggingRef.current.lastX = x;
       draggingRef.current.lastY = y;
-      dispatch({ type: 'DRAG_PLAYER', payload: { id: draggingRef.current.playerId, x, y } });
+
+      // Move the SVG element directly via the DOM — no React re-render during drag.
+      // This eliminates the frame-by-frame jump caused by the React render cycle.
+      if (dragRafRef.current === null) {
+        dragRafRef.current = requestAnimationFrame(() => {
+          dragRafRef.current = null;
+          const drag = draggingRef.current;
+          if (!drag) return;
+          const el = playerElRefs.current[drag.playerId];
+          if (!el) return;
+          const newCx = drag.lastX * viewBoxW;
+          const newCy = drag.lastY * viewBoxH;
+          const circle = el.querySelector('circle');
+          const text   = el.querySelector('text');
+          if (circle) { circle.setAttribute('cx', newCx); circle.setAttribute('cy', newCy); }
+          if (text)   { text.setAttribute('x',  newCx); text.setAttribute('y',  newCy);   }
+        });
+      }
     }
   }
 
@@ -220,7 +239,13 @@ export default function PlayEditor({ play, teamId, onSave, onCancel }) {
       dispatch({ type: 'FINISH_ARROW' });
     }
     if (draggingRef.current) {
-      // Commit final position to history so undo works cleanly
+      // Cancel any pending rAF so it doesn't fire after we commit
+      if (dragRafRef.current !== null) {
+        cancelAnimationFrame(dragRafRef.current);
+        dragRafRef.current = null;
+      }
+      // Commit final position to React state — this triggers one re-render that
+      // "bakes in" the position the DOM element is already showing
       dispatch({
         type: 'MOVE_PLAYER',
         payload: { id: draggingRef.current.playerId, x: draggingRef.current.lastX, y: draggingRef.current.lastY },
@@ -406,14 +431,13 @@ export default function PlayEditor({ play, teamId, onSave, onCancel }) {
           <div
             ref={canvasRef}
             className="editor-canvas-wrap"
-            style={{ width: SVG_W, height: SVG_H }}
+            style={{ width: SVG_W, height: SVG_H, touchAction: 'none' }}
             onClickCapture={handleCanvasClick}
             onPointerDown={handleCanvasPointerDown}
             onPointerMove={handleCanvasPointerMove}
             onPointerUp={handleCanvasPointerUp}
             onPointerLeave={handleCanvasPointerUp}
             onPointerCancel={() => { draggingRef.current = null; }}
-            style={{ touchAction: 'none' }}
           >
             <FieldSVG format={diagram.format} width={SVG_W} height={SVG_H}>
 
@@ -423,6 +447,7 @@ export default function PlayEditor({ play, teamId, onSave, onCancel }) {
                 return (
                   <g
                     key={player.id}
+                    ref={el => { if (el) playerElRefs.current[player.id] = el; else delete playerElRefs.current[player.id]; }}
                     onPointerDown={e => handlePlayerPointerDown(e, player.id)}
                     onPointerEnter={() => setHoveredPlayer(player.id)}
                     onPointerLeave={() => setHoveredPlayer(null)}
