@@ -12,6 +12,7 @@ const AthleteProfile   = lazy(() => import('./components/roster/AthleteProfile.j
 const GameMode         = lazy(() => import('./components/game/GameMode.js'));
 const GameSummary      = lazy(() => import('./components/game/GameSummary.js'));
 const LinesPage        = lazy(() => import('./components/lines/LinesPage.js'));
+const PlayerShareView  = lazy(() => import('./components/share/PlayerShareView.js'));
 const PlayLibrary      = lazy(() => import('./components/plays/PlayLibrary.js'));
 const PracticeCalendar = lazy(() => import('./components/practice/PracticeCalendar.js'));
 const SettingsPage     = lazy(() => import('./components/settings/SettingsPage.js'));
@@ -84,6 +85,9 @@ export default function App() {
                 </PublicRoute>
               }
             />
+
+            {/* Public: athlete share link (no auth) */}
+            <Route path="/share/player/:token" element={<PlayerShareView />} />
 
             {/* Protected: all app pages inside AppShell */}
             <Route

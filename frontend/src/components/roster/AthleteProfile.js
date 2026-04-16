@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAthlete } from '../../hooks/useRoster';
 import { useRoster } from '../../hooks/useRoster';
 import { useAuth } from '../../context/AuthContext';
+import apiClient from '../../config/api';
 import StatCard from '../common/StatCard';
 import Badge from '../common/Badge';
 import Button from '../common/Button';
@@ -44,6 +45,61 @@ export default function AthleteProfile() {
   const [editSummary, setEditSummary] = useState(false);
   const [editSkills,  setEditSkills]  = useState({});
   const [saving,      setSaving]      = useState(false);
+
+  // Share-link state
+  const [shares, setShares]         = useState([]);
+  const [shareBusy, setShareBusy]   = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+
+  const loadShares = useCallback(async () => {
+    if (!athleteId) return;
+    try {
+      const res = await apiClient.get(`/public/athletes/${athleteId}/share`);
+      setShares(res.data.shares || []);
+    } catch {
+      // Non-fatal — coaches without tokens yet just see the Create button.
+    }
+  }, [athleteId]);
+
+  useEffect(() => { loadShares(); }, [loadShares]);
+
+  const activeShare = shares.find(s => !s.revoked_at && (!s.expires_at || new Date(s.expires_at) > new Date())) || null;
+
+  function shareUrl(token) {
+    return `${window.location.origin}/share/player/${token}`;
+  }
+
+  async function createShare() {
+    setShareBusy(true);
+    try {
+      await apiClient.post(`/public/athletes/${athleteId}/share`);
+      await loadShares();
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
+  async function revokeShares() {
+    if (!window.confirm('Revoke this share link? Anyone who saved the URL will lose access.')) return;
+    setShareBusy(true);
+    try {
+      await apiClient.delete(`/public/athletes/${athleteId}/share`);
+      await loadShares();
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
+  async function copyShare() {
+    if (!activeShare) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl(activeShare.token));
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    } catch {
+      // Fall back silently — URL is still visible in the input.
+    }
+  }
 
   function openEdit() {
     setEditEmail(athlete?.email || '');
@@ -205,6 +261,57 @@ export default function AthleteProfile() {
           </p>
         </div>
       )}
+
+      {/* Share stats (P5) */}
+      <p className="section-heading">Share Stats with {athlete.first_name}</p>
+      <div className="card" style={{ marginBottom: 'var(--sp-8)' }}>
+        {activeShare ? (
+          <>
+            <p style={{
+              fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-xs)',
+              color: 'var(--color-text-muted)', marginTop: 0, marginBottom: 'var(--sp-3)',
+            }}>
+              Anyone with this link can view {athlete.first_name}'s season stats (no login).
+              Expires {activeShare.expires_at ? new Date(activeShare.expires_at).toLocaleDateString() : 'never'}.
+              Views: {activeShare.view_count}.
+            </p>
+            <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'stretch', flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                readOnly
+                value={shareUrl(activeShare.token)}
+                onClick={e => e.target.select()}
+                style={{
+                  flex: '1 1 280px', minWidth: 200,
+                  background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-sm)', padding: '10px 12px',
+                  fontFamily: 'var(--font-stats)', fontSize: 'var(--text-xs)',
+                  color: 'var(--color-text-primary)', outline: 'none',
+                }}
+              />
+              <Button variant="primary" size="sm" onClick={copyShare}>
+                {shareCopied ? 'Copied' : 'Copy'}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={revokeShares} disabled={shareBusy}>
+                Revoke
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p style={{
+              fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-xs)',
+              color: 'var(--color-text-muted)', marginTop: 0, marginBottom: 'var(--sp-3)',
+            }}>
+              Generate a private link for {athlete.first_name} or their family to see
+              season stats, no account required. Coach notes stay hidden.
+            </p>
+            <Button variant="primary" size="sm" onClick={createShare} disabled={shareBusy}>
+              {shareBusy ? 'Creating…' : 'Create Share Link'}
+            </Button>
+          </>
+        )}
+      </div>
 
       {/* Notes */}
       {athlete.notes && (
