@@ -11,6 +11,8 @@ import Badge from '../common/Badge';
 import Button from '../common/Button';
 import GameSetup from './GameSetup';
 import StagingPanel from './StagingPanel';
+import PlaytimePanel from './PlaytimePanel';
+import OpponentStatsPanel from './OpponentStatsPanel';
 import AICoachPanel from '../ai/AICoachPanel';
 import { formatDateTime } from '../../utils/formatters';
 
@@ -774,7 +776,8 @@ export default function GameMode() {
   const { game, loading, updateScore, updateStatus, refresh: refreshGame } = useGame(gameId);
   const {
     connected, liveState, clockTime, mergeAlerts, activating,
-    startClock, stopClock,
+    playtime, equityFlags,
+    startClock, stopClock, logOpponentEvent,
     addToQueue, removeFromQueue, removeMoveFromQueue, activateQueue,
   } = useGameSocket(gameId, token);
 
@@ -788,7 +791,13 @@ export default function GameMode() {
   const [showStats,      setShowStats]      = useState(false);
   const [aiOpen,         setAiOpen]         = useState(false);
   const [undoing,        setUndoing]        = useState(false);
-  const [playtimeAlerts, setPlaytimeAlerts] = useState([]);
+
+  // HIGH-urgency under-target flags from the socket feed. Equity flags arrive
+  // every ~5s via playtime_tick; we only surface the urgent under-target
+  // alerts here as a sub-in nudge on top of the dedicated PlaytimePanel.
+  const playtimeAlerts = (equityFlags || []).filter(
+    f => f.urgency === 'HIGH' && f.status === 'UNDER_TARGET'
+  );
 
   useEffect(() => {
     if (game) {
@@ -838,27 +847,6 @@ export default function GameMode() {
         )
     );
   }
-
-  // Poll playtime equity every 60s and surface HIGH-urgency flags
-  useEffect(() => {
-    if (!gameId) return;
-    let cancelled = false;
-
-    async function fetchPlaytime() {
-      try {
-        const res = await apiClient.get(`/game-live/${gameId}/playtime`);
-        if (cancelled) return;
-        const highFlags = (res.data.equityFlags || []).filter(f => f.urgency === 'HIGH');
-        setPlaytimeAlerts(highFlags);
-      } catch {
-        // Silently ignore — don't interrupt the game for a failed playtime poll
-      }
-    }
-
-    fetchPlaytime();
-    const interval = setInterval(fetchPlaytime, 60000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [gameId]);
 
   if (!gameId) return <GamePicker teamId={team?.id} />;
   if (loading)  return (
@@ -1053,7 +1041,7 @@ export default function GameMode() {
       {/* ── Playtime Alerts ──────────────────────────────── */}
       {playtimeAlerts.length > 0 && (
         <div style={{ marginBottom: 'var(--sp-6)' }}>
-          {playtimeAlerts.filter(f => f.status === 'UNDER_TARGET').map(flag => {
+          {playtimeAlerts.map(flag => {
             const a = athletes?.find(p => String(p.id) === String(flag.athleteId));
             const name = a ? `#${a.jersey_number ?? ''} ${a.first_name} ${a.last_name}`.trim() : `Player ${flag.athleteId}`;
             return (
@@ -1087,6 +1075,21 @@ export default function GameMode() {
           })}
         </div>
       )}
+
+      {/* ── Live Playtime Panel ─────────────────────────── */}
+      <PlaytimePanel
+        athletes={athletes || []}
+        playtime={playtime}
+        equityFlags={equityFlags}
+      />
+
+      {/* ── Opponent Stats Logger ────────────────────────── */}
+      <OpponentStatsPanel
+        gameId={gameId}
+        opposingTeamId={game?.opposing_team_id || null}
+        opponentName={game?.opponent || 'Opponent'}
+        logOpponentEvent={logOpponentEvent}
+      />
 
       {/* ── Quick Actions ────────────────────────────────── */}
       <p className="section-heading">Quick Actions</p>
