@@ -261,10 +261,13 @@ export default function PlayEditor({ play, teamId, onSave, onCancel }) {
     } else if (diagram.selectedTool === 'delete') {
       dispatch({ type: 'REMOVE_PLAYER', payload: playerId });
     } else if (diagram.selectedTool === 'select') {
-      // Begin drag — capture pointer on the canvas so moves aren't lost at speed
+      // Prevent iOS Safari from stealing the touch for scroll
+      e.preventDefault();
       const player = diagram.players.find(p => p.id === playerId);
       draggingRef.current = { playerId, lastX: player?.x ?? 0.5, lastY: player?.y ?? 0.5 };
-      canvasRef.current?.setPointerCapture?.(e.pointerId);
+      // Capture on the <g> element that received the touch — iOS requires capture to be
+      // set on the actual event target, not a parent div, for redirected events to work
+      e.currentTarget.setPointerCapture(e.pointerId);
     }
   }
 
@@ -436,7 +439,14 @@ export default function PlayEditor({ play, teamId, onSave, onCancel }) {
             onPointerDown={handleCanvasPointerDown}
             onPointerMove={handleCanvasPointerMove}
             onPointerUp={handleCanvasPointerUp}
-            onPointerLeave={handleCanvasPointerUp}
+            onPointerLeave={() => {
+              // Only finish arrow drawing when pointer exits canvas.
+              // Do NOT end player drag here — pointer capture keeps the drag alive and
+              // iOS can fire spurious pointerleave events mid-gesture that would drop the piece.
+              if (diagram.selectedTool === 'arrow' && diagram.drawingArrow) {
+                dispatch({ type: 'FINISH_ARROW' });
+              }
+            }}
             onPointerCancel={() => { draggingRef.current = null; }}
           >
             <FieldSVG format={diagram.format} width={SVG_W} height={SVG_H}>

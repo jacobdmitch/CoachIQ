@@ -13,7 +13,7 @@ export default function FieldSVG({ format = 'half_field', width = 800, height = 
       width={width}
       height={height}
       viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
-      style={{ border: '2px solid #333', backgroundColor: '#1a5c1a' }}
+      style={{ border: '2px solid #333', backgroundColor: '#1a5c1a', touchAction: 'none' }}
     >
       {/* Field background */}
       <rect width={viewBoxWidth} height={viewBoxHeight} fill="#1a5c1a" />
