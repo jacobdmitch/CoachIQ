@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAthlete } from '../../hooks/useRoster';
 import { useRoster } from '../../hooks/useRoster';
 import { useAuth } from '../../context/AuthContext';
+import apiClient from '../../config/api';
 import StatCard from '../common/StatCard';
 import Badge from '../common/Badge';
 import Button from '../common/Button';
@@ -42,18 +43,95 @@ export default function AthleteProfile() {
   const [editing,     setEditing]     = useState(false);
   const [editEmail,   setEditEmail]   = useState('');
   const [editSummary, setEditSummary] = useState(false);
+  const [editSkills,  setEditSkills]  = useState({});
   const [saving,      setSaving]      = useState(false);
+
+  // Share-link state
+  const [shares, setShares]         = useState([]);
+  const [shareBusy, setShareBusy]   = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+
+  const loadShares = useCallback(async () => {
+    if (!athleteId) return;
+    try {
+      const res = await apiClient.get(`/public/athletes/${athleteId}/share`);
+      setShares(res.data.shares || []);
+    } catch {
+      // Non-fatal — coaches without tokens yet just see the Create button.
+    }
+  }, [athleteId]);
+
+  useEffect(() => { loadShares(); }, [loadShares]);
+
+  const activeShare = shares.find(s => !s.revoked_at && (!s.expires_at || new Date(s.expires_at) > new Date())) || null;
+
+  function shareUrl(token) {
+    return `${window.location.origin}/share/player/${token}`;
+  }
+
+  async function createShare() {
+    setShareBusy(true);
+    try {
+      await apiClient.post(`/public/athletes/${athleteId}/share`);
+      await loadShares();
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
+  async function revokeShares() {
+    if (!window.confirm('Revoke this share link? Anyone who saved the URL will lose access.')) return;
+    setShareBusy(true);
+    try {
+      await apiClient.delete(`/public/athletes/${athleteId}/share`);
+      await loadShares();
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
+  async function copyShare() {
+    if (!activeShare) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl(activeShare.token));
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    } catch {
+      // Fall back silently — URL is still visible in the input.
+    }
+  }
 
   function openEdit() {
     setEditEmail(athlete?.email || '');
     setEditSummary(athlete?.send_game_summary || false);
+    setEditSkills({
+      skillShooting:       athlete?.skill_shooting       ?? '',
+      skillDodging:        athlete?.skill_dodging        ?? '',
+      skillPassing:        athlete?.skill_passing        ?? '',
+      skillFieldAwareness: athlete?.skill_field_awareness ?? '',
+      skillDefense:        athlete?.skill_defense        ?? '',
+      skillGroundBalls:    athlete?.skill_ground_balls   ?? '',
+      skillTransition:     athlete?.skill_transition     ?? '',
+      skillFaceoff:        athlete?.skill_faceoff        ?? '',
+    });
     setEditing(true);
   }
 
   async function saveEdit() {
     setSaving(true);
     try {
-      await updateAthlete(athleteId, { email: editEmail.trim() || null, sendGameSummary: editSummary });
+      const skillsPayload = Object.fromEntries(
+        Object.entries(editSkills).map(([k, v]) => {
+          if (v === '' || v === null || v === undefined) return [k, null];
+          const n = Number(v);
+          return [k, Number.isFinite(n) ? Math.max(1, Math.min(10, Math.round(n))) : null];
+        })
+      );
+      await updateAthlete(athleteId, {
+        email: editEmail.trim() || null,
+        sendGameSummary: editSummary,
+        ...skillsPayload,
+      });
       setEditing(false);
     } finally {
       setSaving(false);
@@ -154,26 +232,86 @@ export default function AthleteProfile() {
         <StatCard label="Status"        value={athlete.status ? athlete.status.charAt(0).toUpperCase() + athlete.status.slice(1) : 'Active'} />
       </div>
 
-      {/* Skill ratings */}
-      {(athlete.skill_shooting || athlete.skill_passing || athlete.skill_defense) && (
-        <>
-          <p className="section-heading">Skill Ratings</p>
-          <div className="grid-2" style={{ marginBottom: 'var(--sp-8)' }}>
-            <div className="card">
-              <SkillBar label="Shooting"        value={athlete.skill_shooting} />
-              <SkillBar label="Passing"         value={athlete.skill_passing} />
-              <SkillBar label="Dodging"         value={athlete.skill_dodging} />
-              <SkillBar label="Field Awareness" value={athlete.skill_field_awareness} />
-            </div>
-            <div className="card">
-              <SkillBar label="Defense"      value={athlete.skill_defense} />
-              <SkillBar label="Ground Balls" value={athlete.skill_ground_balls} />
-              <SkillBar label="Faceoff"      value={athlete.skill_faceoff} />
-              <SkillBar label="Transition"   value={athlete.skill_transition} />
-            </div>
+      {/* Skill ratings — always shown so coaches know ratings drive line suggestions */}
+      <p className="section-heading">Skill Ratings</p>
+      {(athlete.skill_shooting || athlete.skill_passing || athlete.skill_defense
+        || athlete.skill_dodging || athlete.skill_field_awareness
+        || athlete.skill_ground_balls || athlete.skill_faceoff || athlete.skill_transition) ? (
+        <div className="grid-2" style={{ marginBottom: 'var(--sp-8)' }}>
+          <div className="card">
+            <SkillBar label="Shooting"        value={athlete.skill_shooting} />
+            <SkillBar label="Passing"         value={athlete.skill_passing} />
+            <SkillBar label="Dodging"         value={athlete.skill_dodging} />
+            <SkillBar label="Field Awareness" value={athlete.skill_field_awareness} />
           </div>
-        </>
+          <div className="card">
+            <SkillBar label="Defense"      value={athlete.skill_defense} />
+            <SkillBar label="Ground Balls" value={athlete.skill_ground_balls} />
+            <SkillBar label="Faceoff"      value={athlete.skill_faceoff} />
+            <SkillBar label="Transition"   value={athlete.skill_transition} />
+          </div>
+        </div>
+      ) : (
+        <div className="card" style={{ marginBottom: 'var(--sp-8)' }}>
+          <p style={{
+            fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-sm)',
+            color: 'var(--color-text-muted)', lineHeight: 'var(--leading-normal)', margin: 0,
+          }}>
+            No ratings yet — add 1-10 ratings in Edit Profile to power line suggestions.
+          </p>
+        </div>
       )}
+
+      {/* Share stats (P5) */}
+      <p className="section-heading">Share Stats with {athlete.first_name}</p>
+      <div className="card" style={{ marginBottom: 'var(--sp-8)' }}>
+        {activeShare ? (
+          <>
+            <p style={{
+              fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-xs)',
+              color: 'var(--color-text-muted)', marginTop: 0, marginBottom: 'var(--sp-3)',
+            }}>
+              Anyone with this link can view {athlete.first_name}'s season stats (no login).
+              Expires {activeShare.expires_at ? new Date(activeShare.expires_at).toLocaleDateString() : 'never'}.
+              Views: {activeShare.view_count}.
+            </p>
+            <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'stretch', flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                readOnly
+                value={shareUrl(activeShare.token)}
+                onClick={e => e.target.select()}
+                style={{
+                  flex: '1 1 280px', minWidth: 200,
+                  background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-sm)', padding: '10px 12px',
+                  fontFamily: 'var(--font-stats)', fontSize: 'var(--text-xs)',
+                  color: 'var(--color-text-primary)', outline: 'none',
+                }}
+              />
+              <Button variant="primary" size="sm" onClick={copyShare}>
+                {shareCopied ? 'Copied' : 'Copy'}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={revokeShares} disabled={shareBusy}>
+                Revoke
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p style={{
+              fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-xs)',
+              color: 'var(--color-text-muted)', marginTop: 0, marginBottom: 'var(--sp-3)',
+            }}>
+              Generate a private link for {athlete.first_name} or their family to see
+              season stats, no account required. Coach notes stay hidden.
+            </p>
+            <Button variant="primary" size="sm" onClick={createShare} disabled={shareBusy}>
+              {shareBusy ? 'Creating…' : 'Create Share Link'}
+            </Button>
+          </>
+        )}
+      </div>
 
       {/* Notes */}
       {athlete.notes && (
@@ -246,6 +384,59 @@ export default function AthleteProfile() {
                 </span>
               </span>
             </label>
+
+            {/* Skill ratings — 1-10; blank clears the value */}
+            <p style={{
+              fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)',
+              letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--color-text-muted)',
+              marginBottom: 'var(--sp-2)',
+            }}>
+              Skill Ratings (1–10)
+            </p>
+            <p style={{
+              fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-xs)',
+              color: 'var(--color-text-muted)', marginBottom: 'var(--sp-3)',
+            }}>
+              Used by the line generator to rank players per role.
+            </p>
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)',
+              gap: 'var(--sp-2) var(--sp-3)', marginBottom: 'var(--sp-6)',
+            }}>
+              {[
+                { key: 'skillShooting',       label: 'Shooting' },
+                { key: 'skillDodging',        label: 'Dodging' },
+                { key: 'skillPassing',        label: 'Passing' },
+                { key: 'skillFieldAwareness', label: 'Field IQ' },
+                { key: 'skillDefense',        label: 'Defense' },
+                { key: 'skillGroundBalls',    label: 'Ground Balls' },
+                { key: 'skillTransition',     label: 'Transition' },
+                { key: 'skillFaceoff',        label: 'Faceoff' },
+              ].map(s => (
+                <label key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+                  <span style={{
+                    flex: 1, fontFamily: 'var(--font-body)', fontWeight: 600,
+                    fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)',
+                  }}>
+                    {s.label}
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={editSkills[s.key] ?? ''}
+                    onChange={e => setEditSkills(prev => ({ ...prev, [s.key]: e.target.value }))}
+                    placeholder="—"
+                    style={{
+                      width: 56, background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
+                      borderRadius: 'var(--radius-sm)', padding: '6px 8px',
+                      fontFamily: 'var(--font-stats)', fontSize: 'var(--text-sm)',
+                      color: 'var(--color-text-primary)', textAlign: 'center', outline: 'none',
+                    }}
+                  />
+                </label>
+              ))}
+            </div>
 
             <div style={{ display: 'flex', gap: 'var(--sp-3)', justifyContent: 'flex-end' }}>
               <Button variant="ghost" size="sm" onClick={() => setEditing(false)} disabled={saving}>

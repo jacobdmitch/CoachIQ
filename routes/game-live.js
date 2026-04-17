@@ -10,6 +10,7 @@ import { persistGameEvent, persistPlaytimeEntry, saveGameStateSnapshot, loadGame
 import { broadcastGameUpdate } from './game-sync.js';
 import { gameStates, playtimeTrackers, clockIntervals } from '../services/liveGameStore.js';
 import { resolveSituation } from '../services/situationResolver.js';
+import { computeOpposingThreats } from '../services/opponentScoutingService.js';
 
 const subSchema = z.object({
   playerIn: z.string().uuid(),
@@ -20,6 +21,18 @@ const subSchema = z.object({
 const eventSchema = z.object({
   eventType: z.string().min(1).max(30),
   athleteId: z.string().uuid(),
+  metadata: z.record(z.any()).optional(),
+});
+
+const OPPONENT_EVENT_TYPES = [
+  'goal', 'assist', 'shot', 'shot_on_goal',
+  'ground_ball', 'turnover', 'caused_turnover',
+  'save', 'penalty', 'faceoff_win', 'faceoff_loss',
+];
+
+const opponentEventSchema = z.object({
+  eventType: z.enum(OPPONENT_EVENT_TYPES),
+  opposingPlayerId: z.string().uuid().nullable().optional(),
   metadata: z.record(z.any()).optional(),
 });
 
@@ -37,8 +50,14 @@ const router = express.Router();
  * Emits a `clock_tick` event every second to all connected clients so their
  * displays stay in sync regardless of when they joined.
  */
+// How often (in seconds) to broadcast the playtime summary while the clock is
+// running. Fast enough to feel live on the sideline, cheap enough to stay off
+// the hot path.
+const PLAYTIME_BROADCAST_INTERVAL_SECONDS = 5;
+
 function startClockInterval(gameId) {
   if (clockIntervals.has(gameId)) return; // already running
+  let ticks = 0;
   const interval = setInterval(() => {
     const gs = gameStates.get(gameId);
     if (!gs || !gs.clockRunning) {
@@ -48,6 +67,18 @@ function startClockInterval(gameId) {
     const elapsed = Math.floor((Date.now() - gs.startTime) / 1000);
     gs.clockTime = elapsed;
     broadcastGameUpdate(gameId, 'clock_tick', { clockTime: elapsed });
+
+    ticks += 1;
+    if (ticks % PLAYTIME_BROADCAST_INTERVAL_SECONDS === 0) {
+      const tracker = playtimeTrackers.get(gameId);
+      if (tracker) {
+        tracker.tick(Date.now());
+        broadcastGameUpdate(gameId, 'playtime_tick', {
+          summary:      tracker.getPlaytimeSummary(),
+          equityFlags:  tracker.getEquityFlags(),
+        });
+      }
+    }
   }, 1000);
   clockIntervals.set(gameId, interval);
 }
@@ -342,6 +373,135 @@ router.post(
 );
 
 /**
+ * POST /:gameId/opponent-event
+ * Log a stat event for the opposing team during live play.
+ * Body: { eventType, opposingPlayerId?, metadata? }
+ *
+ * opposingPlayerId is optional — when absent, the event is recorded as a
+ * team-level opposing stat (still shows up in home/away totals, but is not
+ * attributable to a specific player). When present, the event feeds the
+ * per-player scouting history used by the threat calculator (P6).
+ *
+ * Opponent events do not affect our own playtime tracker or lineup state.
+ */
+router.post(
+  '/:gameId/opponent-event',
+  authenticateToken,
+  asyncHandler(async (req, res) => {
+    const { gameId } = req.params;
+    const parsed = opponentEventSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(`Invalid input: ${parsed.error.issues.map(i => i.message).join(', ')}`, 400);
+    }
+    const { eventType, opposingPlayerId, metadata = {} } = parsed.data;
+
+    const gameState = gameStates.get(gameId);
+    if (!gameState) {
+      throw new AppError('Game not initialized', 400);
+    }
+
+    // If an opposingPlayerId was provided, confirm it belongs to this game's
+    // scouted opposing team. Anonymous team-side events bypass this check.
+    if (opposingPlayerId) {
+      const verify = await query(
+        `SELECT op.id
+           FROM opposing_players op
+           JOIN opposing_teams ot ON op.opposing_team_id = ot.id
+           JOIN games g           ON g.opposing_team_id = ot.id
+          WHERE op.id = $1 AND g.id = $2`,
+        [opposingPlayerId, gameId]
+      );
+      if (verify.rows.length === 0) {
+        throw new AppError('opposingPlayerId does not belong to this game\'s opposing team', 400);
+      }
+    }
+
+    // Record in the in-memory event log so live sync shows it, but do not
+    // route through logEvent (which expects an athlete). Build the event
+    // payload directly so persistGameEvent and consumers see teamSide.
+    const DB_TO_INMEM = {
+      goal: 'GOAL', assist: 'ASSIST', shot: 'SHOT', shot_on_goal: 'SHOT_ON_GOAL',
+      ground_ball: 'GROUND_BALL', turnover: 'TURNOVER', caused_turnover: 'CAUSED_TURNOVER',
+      save: 'SAVE', penalty: 'PENALTY',
+      faceoff_win: 'FACEOFF_WIN', faceoff_loss: 'FACEOFF_LOSS',
+    };
+    const inMemType = DB_TO_INMEM[eventType];
+
+    const event = {
+      type:              inMemType,
+      timestamp:         Date.now(),
+      athleteId:         null,
+      teamSide:          'away',
+      opposingPlayerId:  opposingPlayerId || null,
+      period:            gameState.period,
+      clockTime:         gameState.clockTime,
+      ...metadata,
+    };
+    gameState.events.push(event);
+
+    // Persist to DB — persistGameEvent maps teamSide→team_side and nulls athlete
+    persistGameEvent(gameId, event);
+
+    broadcastGameUpdate(gameId, 'game_event', event);
+    logger.debug(`Opponent event: ${gameId}, ${eventType}, opposingPlayer ${opposingPlayerId || 'team'}`);
+
+    // Recompute and broadcast opponent threat scores so the sideline
+    // panel reflects the new event immediately. Fire-and-forget — a DB
+    // hiccup here shouldn't block the event response.
+    broadcastThreats(gameId).catch(err =>
+      logger.warn(`Threat broadcast failed for ${gameId}: ${err.message}`)
+    );
+
+    res.json({ success: true, event, state: gameState.getState() });
+  })
+);
+
+// ─── Threat recompute / broadcast helper ─────────────────────────────────────
+
+async function broadcastThreats(gameId) {
+  const gameState = gameStates.get(gameId);
+  if (!gameState) return;
+  const gameRow = await query(
+    'SELECT opposing_team_id FROM games WHERE id = $1',
+    [gameId]
+  );
+  const opposingTeamId = gameRow.rows[0]?.opposing_team_id;
+  if (!opposingTeamId) return;
+
+  const threats = await computeOpposingThreats({
+    opposingTeamId,
+    liveAwayEvents: gameState.events || [],
+  });
+  broadcastGameUpdate(gameId, 'opponent_threats', { threats });
+}
+
+// ─── GET /:gameId/threats — on-demand threat ranking ─────────────────────────
+
+router.get(
+  '/:gameId/threats',
+  authenticateToken,
+  asyncHandler(async (req, res) => {
+    const { gameId } = req.params;
+    const gameRow = await query(
+      'SELECT opposing_team_id FROM games WHERE id = $1',
+      [gameId]
+    );
+    if (gameRow.rows.length === 0) throw new AppError('Game not found', 404);
+    const opposingTeamId = gameRow.rows[0].opposing_team_id;
+
+    if (!opposingTeamId) {
+      return res.json({ success: true, threats: [], note: 'No opposing team linked to this game.' });
+    }
+    const gameState = gameStates.get(gameId);
+    const threats = await computeOpposingThreats({
+      opposingTeamId,
+      liveAwayEvents: gameState?.events || [],
+    });
+    res.json({ success: true, threats });
+  })
+);
+
+/**
  * DELETE /:gameId/event/last
  * Undo the most recent stat event (goal, assist, shot, etc.) for this game.
  * Removes it from in-memory state and deletes it from the database.
@@ -368,20 +528,49 @@ router.delete(
     };
     const dbType = TYPE_MAP[removed.type];
 
-    if (dbType && removed.athleteId) {
-      // Delete the most recently inserted matching row
-      await query(
-        `DELETE FROM game_events WHERE id = (
-           SELECT id FROM game_events
-           WHERE game_id = $1 AND athlete_id = $2 AND event_type = $3
-           ORDER BY created_at DESC
-           LIMIT 1
-         )`,
-        [gameId, removed.athleteId, dbType]
-      );
+    if (dbType) {
+      const teamSide = removed.teamSide === 'away' ? 'away' : 'home';
+      if (teamSide === 'home' && removed.athleteId) {
+        await query(
+          `DELETE FROM game_events WHERE id = (
+             SELECT id FROM game_events
+             WHERE game_id = $1 AND team_side = 'home'
+               AND athlete_id = $2 AND event_type = $3
+             ORDER BY created_at DESC
+             LIMIT 1
+           )`,
+          [gameId, removed.athleteId, dbType]
+        );
+      } else if (teamSide === 'away') {
+        // Match on opposing_player_id when present; else match any team-side
+        // opponent event of this type for the game.
+        if (removed.opposingPlayerId) {
+          await query(
+            `DELETE FROM game_events WHERE id = (
+               SELECT id FROM game_events
+               WHERE game_id = $1 AND team_side = 'away'
+                 AND opposing_player_id = $2 AND event_type = $3
+               ORDER BY created_at DESC
+               LIMIT 1
+             )`,
+            [gameId, removed.opposingPlayerId, dbType]
+          );
+        } else {
+          await query(
+            `DELETE FROM game_events WHERE id = (
+               SELECT id FROM game_events
+               WHERE game_id = $1 AND team_side = 'away'
+                 AND opposing_player_id IS NULL AND event_type = $3
+               ORDER BY created_at DESC
+               LIMIT 1
+             )`,
+            [gameId, null, dbType]
+          );
+        }
+      }
     }
 
-    logger.info(`Undo last event: ${removed.type} for athlete ${removed.athleteId} in game ${gameId}`);
+    logger.info(`Undo last event: ${removed.type} (${removed.teamSide || 'home'}) in game ${gameId}`);
     broadcastGameUpdate(gameId, 'state_update', { state: gameState.getState() });
 
     res.json({ success: true, removed, state: gameState.getState() });

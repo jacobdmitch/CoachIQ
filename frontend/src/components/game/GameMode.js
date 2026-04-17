@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -11,13 +11,18 @@ import Badge from '../common/Badge';
 import Button from '../common/Button';
 import GameSetup from './GameSetup';
 import StagingPanel from './StagingPanel';
+import PlaytimePanel from './PlaytimePanel';
+import OpponentStatsPanel from './OpponentStatsPanel';
+import OpponentThreatsPanel from './OpponentThreatsPanel';
+import GameClocksPanel from './GameClocksPanel';
 import AICoachPanel from '../ai/AICoachPanel';
 import { formatDateTime } from '../../utils/formatters';
 
 const PERIODS = ['1st', '2nd', '3rd', '4th', 'OT'];
 
-// Default shot clock for 6s format (seconds); overridden by game.shot_clock_seconds
-const DEFAULT_SHOT_CLOCK = 60;
+// Default shot clock for 6s format (seconds); overridden by game.shot_clock_seconds.
+// 45s matches the common CIF/club sixes cadence; rules JSON supports 45/60/75.
+const DEFAULT_SHOT_CLOCK = 45;
 
 function formatClock(seconds) {
   if (seconds === null || seconds === undefined) return '—:——';
@@ -219,101 +224,6 @@ function ScoreControl({ score, side, onAdjust }) {
         onPointerLeave={e => e.currentTarget.style.transform = 'scale(1)'}
         aria-label={`Increase ${side} score`}
       >+</button>
-    </div>
-  );
-}
-
-// ─── Shot clock (6s format only) ─────────────────────────────────────────────
-
-function ShotClock({ initialSeconds }) {
-  const [timeLeft, setTimeLeft]   = useState(initialSeconds);
-  const [running,  setRunning]    = useState(false);
-  const intervalRef               = useRef(null);
-
-  // Reset when initialSeconds changes (e.g. game format loaded)
-  useEffect(() => { setTimeLeft(initialSeconds); }, [initialSeconds]);
-
-  useEffect(() => {
-    if (running) {
-      intervalRef.current = setInterval(() => {
-        setTimeLeft(prev => {
-          if (prev <= 1) {
-            clearInterval(intervalRef.current);
-            setRunning(false);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      clearInterval(intervalRef.current);
-    }
-    return () => clearInterval(intervalRef.current);
-  }, [running]);
-
-  function reset() {
-    clearInterval(intervalRef.current);
-    setRunning(false);
-    setTimeLeft(initialSeconds);
-  }
-
-  const urgent = timeLeft <= 10;
-  const expired = timeLeft === 0;
-
-  return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 'var(--sp-3)',
-      padding: 'var(--sp-3) var(--sp-4)',
-      background: expired ? 'var(--color-red-bg)' : urgent ? 'rgba(239,68,68,0.08)' : 'var(--color-surface-1)',
-      border: `1px solid ${expired ? 'var(--color-red-border)' : urgent ? 'rgba(239,68,68,0.3)' : 'var(--color-surface-2)'}`,
-      borderRadius: 'var(--radius-md)',
-    }}>
-      <span style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)', letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>
-        Shot Clock
-      </span>
-      <span style={{
-        fontFamily: 'var(--font-stats)',
-        fontSize: 'var(--text-2xl)',
-        color: expired ? 'var(--color-red)' : urgent ? '#f97316' : 'var(--color-text-primary)',
-        minWidth: 44,
-        textAlign: 'center',
-        fontVariantNumeric: 'tabular-nums',
-        letterSpacing: 2,
-      }}>
-        {timeLeft}
-      </span>
-      <div style={{ display: 'flex', gap: 'var(--sp-2)', marginLeft: 'auto' }}>
-        <button
-          onClick={() => setRunning(r => !r)}
-          style={{
-            padding: 'var(--sp-2) var(--sp-3)',
-            borderRadius: 'var(--radius-sm)',
-            background: running ? 'var(--color-red-bg)' : 'var(--color-green-bg)',
-            border: running ? '1px solid var(--color-red-border)' : '1px solid var(--color-green-border)',
-            color: running ? 'var(--color-red)' : 'var(--color-green)',
-            fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)',
-            cursor: 'pointer', minHeight: 36,
-          }}
-        >
-          {running ? '⏸' : '▶'}
-        </button>
-        <button
-          onClick={reset}
-          style={{
-            padding: 'var(--sp-2) var(--sp-3)',
-            borderRadius: 'var(--radius-sm)',
-            background: 'var(--color-surface-2)',
-            border: '1px solid var(--color-surface-3)',
-            color: 'var(--color-text-muted)',
-            fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)',
-            cursor: 'pointer', minHeight: 36,
-          }}
-        >
-          Reset
-        </button>
-      </div>
     </div>
   );
 }
@@ -774,7 +684,8 @@ export default function GameMode() {
   const { game, loading, updateScore, updateStatus, refresh: refreshGame } = useGame(gameId);
   const {
     connected, liveState, clockTime, mergeAlerts, activating,
-    startClock, stopClock,
+    playtime, equityFlags, threats,
+    startClock, stopClock, logOpponentEvent,
     addToQueue, removeFromQueue, removeMoveFromQueue, activateQueue,
   } = useGameSocket(gameId, token);
 
@@ -788,7 +699,13 @@ export default function GameMode() {
   const [showStats,      setShowStats]      = useState(false);
   const [aiOpen,         setAiOpen]         = useState(false);
   const [undoing,        setUndoing]        = useState(false);
-  const [playtimeAlerts, setPlaytimeAlerts] = useState([]);
+
+  // HIGH-urgency under-target flags from the socket feed. Equity flags arrive
+  // every ~5s via playtime_tick; we only surface the urgent under-target
+  // alerts here as a sub-in nudge on top of the dedicated PlaytimePanel.
+  const playtimeAlerts = (equityFlags || []).filter(
+    f => f.urgency === 'HIGH' && f.status === 'UNDER_TARGET'
+  );
 
   useEffect(() => {
     if (game) {
@@ -838,27 +755,6 @@ export default function GameMode() {
         )
     );
   }
-
-  // Poll playtime equity every 60s and surface HIGH-urgency flags
-  useEffect(() => {
-    if (!gameId) return;
-    let cancelled = false;
-
-    async function fetchPlaytime() {
-      try {
-        const res = await apiClient.get(`/game-live/${gameId}/playtime`);
-        if (cancelled) return;
-        const highFlags = (res.data.equityFlags || []).filter(f => f.urgency === 'HIGH');
-        setPlaytimeAlerts(highFlags);
-      } catch {
-        // Silently ignore — don't interrupt the game for a failed playtime poll
-      }
-    }
-
-    fetchPlaytime();
-    const interval = setInterval(fetchPlaytime, 60000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [gameId]);
 
   if (!gameId) return <GamePicker teamId={team?.id} />;
   if (loading)  return (
@@ -1043,17 +939,16 @@ export default function GameMode() {
 
       </div>
 
-      {/* ── Shot clock (6s only) ─────────────────────────── */}
-      {is6s && (
-        <div style={{ marginBottom: 'var(--sp-6)' }}>
-          <ShotClock initialSeconds={shotClockSeconds} />
-        </div>
-      )}
+      {/* ── Secondary clocks (clear / stall / shot / timeout) ── */}
+      <GameClocksPanel
+        format={game?.format || 'standard'}
+        shotClockSeconds={shotClockSeconds}
+      />
 
       {/* ── Playtime Alerts ──────────────────────────────── */}
       {playtimeAlerts.length > 0 && (
         <div style={{ marginBottom: 'var(--sp-6)' }}>
-          {playtimeAlerts.filter(f => f.status === 'UNDER_TARGET').map(flag => {
+          {playtimeAlerts.map(flag => {
             const a = athletes?.find(p => String(p.id) === String(flag.athleteId));
             const name = a ? `#${a.jersey_number ?? ''} ${a.first_name} ${a.last_name}`.trim() : `Player ${flag.athleteId}`;
             return (
@@ -1087,6 +982,28 @@ export default function GameMode() {
           })}
         </div>
       )}
+
+      {/* ── Live Playtime Panel ─────────────────────────── */}
+      <PlaytimePanel
+        athletes={athletes || []}
+        playtime={playtime}
+        equityFlags={equityFlags}
+      />
+
+      {/* ── Opponent Stats Logger ────────────────────────── */}
+      <OpponentStatsPanel
+        gameId={gameId}
+        opposingTeamId={game?.opposing_team_id || null}
+        opponentName={game?.opponent || 'Opponent'}
+        logOpponentEvent={logOpponentEvent}
+      />
+
+      {/* ── Opponent Threats (P6) ────────────────────────── */}
+      <OpponentThreatsPanel
+        gameId={gameId}
+        opposingTeamId={game?.opposing_team_id || null}
+        threats={threats}
+      />
 
       {/* ── Quick Actions ────────────────────────────────── */}
       <p className="section-heading">Quick Actions</p>

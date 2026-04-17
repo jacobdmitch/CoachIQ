@@ -37,6 +37,8 @@ import practiceRouter from './routes/practice.js';
 import dashboardRouter from './routes/dashboard.js';
 import linesRouter from './routes/lines.js';
 import statsRouter from './routes/stats.js';
+import opposingRouter from './routes/opposing.js';
+import publicRouter from './routes/public.js';
 import setupGameSync from './routes/game-sync.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -128,6 +130,8 @@ app.use('/api/practice', practiceRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/lines', linesRouter);
 app.use('/api/stats', statsRouter);
+app.use('/api/opposing', opposingRouter);
+app.use('/api/public', publicRouter);
 
 // Setup Socket.io game sync
 setupGameSync(io);

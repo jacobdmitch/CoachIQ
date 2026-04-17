@@ -109,6 +109,17 @@ function IconPlays() {
   );
 }
 
+function IconLines() {
+  return (
+    <svg className="nav-tab-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+      <path d="M2 4h12M2 8h12M2 12h12" />
+      <circle cx="4"  cy="4"  r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="10" cy="8"  r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="6"  cy="12" r="1.2" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 function IconPractice() {
   return (
     <svg className="nav-tab-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
@@ -145,6 +156,7 @@ function IconHelp() {
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', Icon: IconDashboard },
   { to: '/roster',    label: 'Roster',    Icon: IconRoster    },
+  { to: '/lines',     label: 'Lines',     Icon: IconLines     },
   { to: '/game',      label: 'Game',      Icon: IconGame      },
   { to: '/plays',     label: 'Plays',     Icon: IconPlays     },
   { to: '/practice',  label: 'Practice',  Icon: IconPractice  },

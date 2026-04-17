@@ -2,6 +2,7 @@ import express from 'express';
 import { authenticateToken } from '../middleware/auth.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.js';
 import { query } from '../services/database.js';
+import { suggestLine, listLineRoles } from '../services/lineBuilder.js';
 import logger from '../services/logger.js';
 
 const router = express.Router();
@@ -13,6 +14,45 @@ async function requireTeamAccess(coachId, teamId) {
   );
   if (result.rows.length === 0) throw new AppError('Team not found or access denied', 403);
 }
+
+// ─── GET /roles — list available line roles for the role picker ──────────────
+
+router.get('/roles', authenticateToken, asyncHandler(async (req, res) => {
+  const format = req.query.format === '6s' ? '6s' : 'standard';
+  res.json({ success: true, roles: listLineRoles({ format }) });
+}));
+
+// ─── GET /suggestions — trait-weighted line suggestion for a role ────────────
+
+router.get('/suggestions', authenticateToken, asyncHandler(async (req, res) => {
+  const { teamId, role } = req.query;
+  if (!teamId || !role) {
+    throw new AppError('teamId and role query params required', 400);
+  }
+  await requireTeamAccess(req.coachId, teamId);
+
+  const rosterResult = await query(
+    `SELECT id, jersey_number, first_name, last_name,
+            primary_position, secondary_position, status,
+            skill_ground_balls, skill_dodging, skill_shooting,
+            skill_passing, skill_defense, skill_faceoff,
+            skill_transition, skill_field_awareness
+     FROM athletes
+     WHERE team_id = $1`,
+    [teamId]
+  );
+
+  const excludeIds = req.query.exclude
+    ? String(req.query.exclude).split(',').filter(Boolean)
+    : [];
+
+  try {
+    const suggestion = suggestLine(rosterResult.rows, role, { excludeIds });
+    res.json({ success: true, ...suggestion });
+  } catch (err) {
+    throw new AppError(err.message || 'Failed to generate suggestion', 400);
+  }
+}));
 
 // ─── GET / — list lines for a team ───────────────────────────────────────────
 
