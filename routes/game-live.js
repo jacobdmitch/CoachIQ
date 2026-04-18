@@ -869,6 +869,13 @@ router.post(
           query(
             `SELECT
                a.id AS athlete_id, a.first_name, a.last_name, a.email, a.send_game_summary,
+               COALESCE(
+                 (SELECT json_agg(
+                           json_build_object('name', pc.name, 'email', pc.email, 'phone', pc.phone)
+                           ORDER BY pc.created_at ASC, pc.id ASC)
+                    FROM parent_contacts pc WHERE pc.athlete_id = a.id),
+                 '[]'::json
+               ) AS parent_contacts,
                COUNT(CASE WHEN ge.event_type = 'goal'         THEN 1 END) AS goals,
                COUNT(CASE WHEN ge.event_type = 'assist'       THEN 1 END) AS assists,
                COUNT(CASE WHEN ge.event_type = 'shot'         THEN 1 END) AS shots,
@@ -881,7 +888,7 @@ router.post(
              FROM athletes a
              LEFT JOIN game_events ge ON a.id = ge.athlete_id AND ge.game_id = $1
              LEFT JOIN playtime_log pl ON a.id = pl.athlete_id AND pl.game_id = $1
-             WHERE a.team_id = $2 AND a.send_game_summary = true AND a.email IS NOT NULL
+             WHERE a.team_id = $2 AND a.send_game_summary = true
              GROUP BY a.id, a.first_name, a.last_name, a.email, a.send_game_summary`,
             [gameId, completedGame.team_id]
           ),

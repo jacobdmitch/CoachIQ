@@ -1,7 +1,7 @@
 import express from 'express';
 import { authenticateToken } from '../middleware/auth.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.js';
-import { query } from '../services/database.js';
+import { query, transaction } from '../services/database.js';
 import logger from '../services/logger.js';
 
 const router = express.Router();
@@ -14,6 +14,64 @@ async function requireTeamAccess(coachId, teamId) {
   );
   if (result.rows.length === 0) {
     throw new AppError('Team not found or access denied.', 403);
+  }
+}
+
+// ─── Parent-contact helpers ──────────────────────────────────────────────────
+//
+// parent_contacts is a child table (migration 015). Coaches can attach 1+ contacts
+// to an athlete. We validate/normalize the inbound array once, and on PATCH we use
+// a replace-all strategy (simplest; coaches don't edit these frequently).
+
+/**
+ * Normalize an inbound parentContacts array. Accepts camelCase keys from the UI,
+ * filters out fully-empty rows, trims strings, and rejects rows with no usable
+ * content (name/email/phone all blank). Returns an array of {name, email, phone}.
+ */
+function normalizeParentContacts(raw) {
+  if (raw == null) return null;            // caller chose not to touch contacts
+  if (!Array.isArray(raw)) {
+    throw new AppError('parentContacts must be an array.', 400);
+  }
+  const out = [];
+  for (const c of raw) {
+    if (!c || typeof c !== 'object') {
+      throw new AppError('Each parent contact must be an object.', 400);
+    }
+    const name  = (c.name  ?? '').toString().trim() || null;
+    const email = (c.email ?? '').toString().trim() || null;
+    const phone = (c.phone ?? '').toString().trim() || null;
+    if (!name && !email && !phone) continue;    // skip blank rows
+    out.push({ name, email, phone });
+  }
+  return out;
+}
+
+/**
+ * Return the parent_contacts rows for an athlete, ordered by creation time.
+ * Pass a pg client to run inside a transaction, or null to use the pool.
+ */
+async function fetchContacts(client, athleteId) {
+  const sql = `SELECT id, name, email, phone, created_at, updated_at
+                 FROM parent_contacts
+                WHERE athlete_id = $1
+                ORDER BY created_at ASC, id ASC`;
+  const res = client ? await client.query(sql, [athleteId]) : await query(sql, [athleteId]);
+  return res.rows;
+}
+
+/**
+ * Replace all parent_contacts rows for an athlete with the supplied list.
+ * Must run inside a transaction (pass the pg client).
+ */
+async function replaceContacts(client, athleteId, contacts) {
+  await client.query('DELETE FROM parent_contacts WHERE athlete_id = $1', [athleteId]);
+  for (const c of contacts) {
+    await client.query(
+      `INSERT INTO parent_contacts (athlete_id, name, email, phone)
+       VALUES ($1, $2, $3, $4)`,
+      [athleteId, c.name, c.email, c.phone]
+    );
   }
 }
 
@@ -87,6 +145,8 @@ router.get('/:id', authenticateToken, asyncHandler(async (req, res) => {
   const athlete = result.rows[0];
   await requireTeamAccess(req.coachId, athlete.team_id);
 
+  athlete.parent_contacts = await fetchContacts(null, athlete.id);
+
   res.json({ success: true, athlete });
 }));
 
@@ -100,6 +160,7 @@ router.post('/', authenticateToken, asyncHandler(async (req, res) => {
     shotHand, isCaptain, depthTier,
     skillGroundBalls, skillDodging, skillShooting, skillPassing,
     skillDefense, skillFaceoff, skillTransition, skillFieldAwareness,
+    parentContacts,
   } = req.body;
 
   if (!teamId || !firstName || !lastName) {
@@ -115,33 +176,43 @@ router.post('/', authenticateToken, asyncHandler(async (req, res) => {
     throw new AppError("depthTier must be 'starter', 'rotation', or 'developmental'.", 400);
   }
 
+  const contactsToInsert = normalizeParentContacts(parentContacts); // null if not supplied
+
   await requireTeamAccess(req.coachId, teamId);
 
-  const result = await query(
-    `INSERT INTO athletes (
-       team_id, first_name, last_name, jersey_number,
-       primary_position, secondary_position, graduation_year, graduation_month, notes,
-       email, send_game_summary,
-       shot_hand, is_captain, depth_tier,
-       skill_ground_balls, skill_dodging, skill_shooting, skill_passing,
-       skill_defense, skill_faceoff, skill_transition, skill_field_awareness
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
-     RETURNING *`,
-    [
-      teamId, firstName, lastName, jerseyNumber || null,
-      primaryPosition || null, secondaryPosition || null,
-      graduationYear || null, graduationMonth ?? null, notes || null,
-      email || null, sendGameSummary ? true : false,
-      shotHand || null, isCaptain ? true : false, depthTier || null,
-      skillGroundBalls || null, skillDodging || null,
-      skillShooting || null, skillPassing || null,
-      skillDefense || null, skillFaceoff || null,
-      skillTransition || null, skillFieldAwareness || null,
-    ]
-  );
+  const athlete = await transaction(async (client) => {
+    const ins = await client.query(
+      `INSERT INTO athletes (
+         team_id, first_name, last_name, jersey_number,
+         primary_position, secondary_position, graduation_year, graduation_month, notes,
+         email, send_game_summary,
+         shot_hand, is_captain, depth_tier,
+         skill_ground_balls, skill_dodging, skill_shooting, skill_passing,
+         skill_defense, skill_faceoff, skill_transition, skill_field_awareness
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+       RETURNING *`,
+      [
+        teamId, firstName, lastName, jerseyNumber || null,
+        primaryPosition || null, secondaryPosition || null,
+        graduationYear || null, graduationMonth ?? null, notes || null,
+        email || null, sendGameSummary ? true : false,
+        shotHand || null, isCaptain ? true : false, depthTier || null,
+        skillGroundBalls || null, skillDodging || null,
+        skillShooting || null, skillPassing || null,
+        skillDefense || null, skillFaceoff || null,
+        skillTransition || null, skillFieldAwareness || null,
+      ]
+    );
+    const row = ins.rows[0];
+    if (contactsToInsert && contactsToInsert.length > 0) {
+      await replaceContacts(client, row.id, contactsToInsert);
+    }
+    row.parent_contacts = await fetchContacts(client, row.id);
+    return row;
+  });
 
   logger.info(`Athlete added: ${firstName} ${lastName} to team ${teamId}`);
-  res.status(201).json({ success: true, athlete: result.rows[0] });
+  res.status(201).json({ success: true, athlete });
 }));
 
 // ─── PATCH /:id — update athlete ──────────────────────────────────────────────
@@ -150,8 +221,14 @@ router.patch('/:id', authenticateToken, asyncHandler(async (req, res) => {
   const athleteResult = await query('SELECT * FROM athletes WHERE id = $1', [req.params.id]);
   if (athleteResult.rows.length === 0) throw new AppError('Athlete not found', 404);
 
-  const athlete = athleteResult.rows[0];
-  await requireTeamAccess(req.coachId, athlete.team_id);
+  const existing = athleteResult.rows[0];
+  await requireTeamAccess(req.coachId, existing.team_id);
+
+  // Pull parentContacts out of the body up front so the column-mapping loop
+  // doesn't try to treat it as an athletes column. null = caller didn't touch
+  // contacts; [] = caller wants to clear them.
+  const { parentContacts, ...fieldBody } = req.body;
+  const contactsToReplace = normalizeParentContacts(parentContacts);
 
   const fields  = [];
   const values  = [];
@@ -180,7 +257,7 @@ router.patch('/:id', authenticateToken, asyncHandler(async (req, res) => {
     skillFieldAwareness: 'skill_field_awareness',
   };
 
-  for (const [key, val] of Object.entries(req.body)) {
+  for (const [key, val] of Object.entries(fieldBody)) {
     const col = keyMap[key] || key;
     if (allowed.includes(col)) {
       if (col === 'graduation_month' && val != null &&
@@ -198,16 +275,30 @@ router.patch('/:id', authenticateToken, asyncHandler(async (req, res) => {
     }
   }
 
-  if (fields.length === 0) throw new AppError('No valid fields to update.', 400);
+  // The request must do SOMETHING — either change a column or touch contacts.
+  if (fields.length === 0 && contactsToReplace === null) {
+    throw new AppError('No valid fields to update.', 400);
+  }
 
-  values.push(req.params.id);
-  const updated = await query(
-    `UPDATE athletes SET ${fields.join(', ')}, updated_at = NOW()
-     WHERE id = $${idx} RETURNING *`,
-    values
-  );
+  const athlete = await transaction(async (client) => {
+    let row = existing;
+    if (fields.length > 0) {
+      values.push(req.params.id);
+      const updated = await client.query(
+        `UPDATE athletes SET ${fields.join(', ')}, updated_at = NOW()
+         WHERE id = $${idx} RETURNING *`,
+        values
+      );
+      row = updated.rows[0];
+    }
+    if (contactsToReplace !== null) {
+      await replaceContacts(client, req.params.id, contactsToReplace);
+    }
+    row.parent_contacts = await fetchContacts(client, req.params.id);
+    return row;
+  });
 
-  res.json({ success: true, athlete: updated.rows[0] });
+  res.json({ success: true, athlete });
 }));
 
 // ─── GET /:id/season-history — per-season stat aggregates ────────────────────

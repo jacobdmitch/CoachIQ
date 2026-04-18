@@ -50,6 +50,9 @@ export default function AthleteProfile() {
   const [editCaptain,   setEditCaptain]   = useState(false);
   const [editDepthTier, setEditDepthTier] = useState('');
   const [editSkills,    setEditSkills]    = useState({});
+  // Parent contacts live as { name, email, phone } rows in edit state.
+  // Empty rows are allowed in the UI; the backend normalizer strips them on save.
+  const [editParentContacts, setEditParentContacts] = useState([]);
   const [saving,        setSaving]        = useState(false);
 
   // Previous-season history
@@ -140,6 +143,14 @@ export default function AthleteProfile() {
       skillTransition:     athlete?.skill_transition     ?? '',
       skillFaceoff:        athlete?.skill_faceoff        ?? '',
     });
+    // Seed with existing contacts if any, else one blank row so the "+ Add contact"
+    // affordance isn't the only way to get started.
+    const existing = Array.isArray(athlete?.parent_contacts) ? athlete.parent_contacts : [];
+    setEditParentContacts(
+      existing.length > 0
+        ? existing.map(c => ({ name: c.name || '', email: c.email || '', phone: c.phone || '' }))
+        : [{ name: '', email: '', phone: '' }]
+    );
     setEditing(true);
   }
 
@@ -161,6 +172,12 @@ export default function AthleteProfile() {
         shotHand:        editShotHand || null,
         isCaptain:       editCaptain,
         depthTier:       editDepthTier || null,
+        // Send the full list — backend does replace-all. Empty rows are filtered server-side.
+        parentContacts: editParentContacts.map(c => ({
+          name:  c.name?.trim()  || null,
+          email: c.email?.trim() || null,
+          phone: c.phone?.trim() || null,
+        })),
         ...skillsPayload,
       });
       setEditing(false);
@@ -264,6 +281,35 @@ export default function AthleteProfile() {
             {athlete.send_game_summary && (
               <Badge variant="gold">Post-game summaries on</Badge>
             )}
+          </div>
+        </>
+      )}
+
+      {/* Parent contacts — shown only when the athlete has any */}
+      {Array.isArray(athlete.parent_contacts) && athlete.parent_contacts.length > 0 && (
+        <>
+          <p className="section-heading">Parent Contacts</p>
+          <div className="card" style={{ marginBottom: 'var(--sp-8)', display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
+            {athlete.parent_contacts.map(c => (
+              <div
+                key={c.id}
+                style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-4)', alignItems: 'baseline' }}
+              >
+                <span style={{ fontFamily: 'var(--font-body)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)', minWidth: 140 }}>
+                  {c.name || 'Parent / Guardian'}
+                </span>
+                {c.email && (
+                  <span style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
+                    {c.email}
+                  </span>
+                )}
+                {c.phone && (
+                  <span style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
+                    {c.phone}
+                  </span>
+                )}
+              </div>
+            ))}
           </div>
         </>
       )}
@@ -513,10 +559,116 @@ export default function AthleteProfile() {
                   Send post-game summary
                 </span>
                 <span style={{ fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
-                  Email this player their stats after each game
+                  Email this player (and parent contacts) their stats after each game
                 </span>
               </span>
             </label>
+
+            {/* Parent contacts — additive list; × removes a row, + appends a new one.
+                Empty rows are stripped server-side (normalizeParentContacts). */}
+            <p style={{
+              fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)',
+              letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--color-text-muted)',
+              marginBottom: 'var(--sp-2)',
+            }}>
+              Parent Contacts
+            </p>
+            <p style={{
+              fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-xs)',
+              color: 'var(--color-text-muted)', marginBottom: 'var(--sp-3)',
+            }}>
+              Receive post-game summaries when enabled above.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)', marginBottom: 'var(--sp-3)' }}>
+              {editParentContacts.map((c, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr 1fr 28px',
+                    gap: 'var(--sp-2)',
+                    alignItems: 'center',
+                  }}
+                >
+                  <input
+                    type="text"
+                    value={c.name}
+                    onChange={e => setEditParentContacts(prev =>
+                      prev.map((row, idx) => idx === i ? { ...row, name: e.target.value } : row)
+                    )}
+                    placeholder="Name"
+                    style={{
+                      boxSizing: 'border-box', width: '100%',
+                      background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
+                      borderRadius: 'var(--radius-sm)', padding: '8px 10px',
+                      fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)',
+                      color: 'var(--color-text-primary)', outline: 'none',
+                    }}
+                  />
+                  <input
+                    type="email"
+                    value={c.email}
+                    onChange={e => setEditParentContacts(prev =>
+                      prev.map((row, idx) => idx === i ? { ...row, email: e.target.value } : row)
+                    )}
+                    placeholder="Email"
+                    style={{
+                      boxSizing: 'border-box', width: '100%',
+                      background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
+                      borderRadius: 'var(--radius-sm)', padding: '8px 10px',
+                      fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)',
+                      color: 'var(--color-text-primary)', outline: 'none',
+                    }}
+                  />
+                  <input
+                    type="tel"
+                    value={c.phone}
+                    onChange={e => setEditParentContacts(prev =>
+                      prev.map((row, idx) => idx === i ? { ...row, phone: e.target.value } : row)
+                    )}
+                    placeholder="Phone"
+                    style={{
+                      boxSizing: 'border-box', width: '100%',
+                      background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
+                      borderRadius: 'var(--radius-sm)', padding: '8px 10px',
+                      fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)',
+                      color: 'var(--color-text-primary)', outline: 'none',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    aria-label={`Remove contact ${i + 1}`}
+                    onClick={() => setEditParentContacts(prev =>
+                      prev.length === 1
+                        ? [{ name: '', email: '', phone: '' }]  // always keep one row visible
+                        : prev.filter((_, idx) => idx !== i)
+                    )}
+                    style={{
+                      width: 28, height: 28, padding: 0,
+                      background: 'transparent', border: '1px solid var(--color-border)',
+                      borderRadius: 'var(--radius-sm)',
+                      color: 'var(--color-text-muted)', cursor: 'pointer',
+                      fontSize: 16, lineHeight: 1,
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setEditParentContacts(prev => [...prev, { name: '', email: '', phone: '' }])}
+              style={{
+                background: 'transparent', border: '1px dashed var(--color-border)',
+                borderRadius: 'var(--radius-sm)', padding: '8px 12px',
+                fontFamily: 'var(--font-body)', fontWeight: 600, fontSize: 'var(--text-xs)',
+                letterSpacing: '1px', textTransform: 'uppercase',
+                color: 'var(--color-text-muted)', cursor: 'pointer', marginBottom: 'var(--sp-6)',
+              }}
+            >
+              + Add contact
+            </button>
 
             {/* Graduation — drives the daily auto-deactivate sweep */}
             <p style={{
