@@ -6,6 +6,7 @@ import { useGames, useGame } from '../../hooks/useGame';
 import { useGameSocket } from '../../hooks/useGameSocket';
 import { useLines } from '../../hooks/useLines';
 import { useRoster } from '../../hooks/useRoster';
+import { useSeasons } from '../../hooks/useSeasons';
 import apiClient from '../../config/api';
 import Badge from '../common/Badge';
 import Button from '../common/Button';
@@ -34,13 +35,37 @@ function formatClock(seconds) {
 // ─── Game picker (no game selected) ──────────────────────────────────────────
 
 function GamePicker({ teamId }) {
-  const { games, loading, scheduleGame } = useGames(teamId);
+  const { games, loading, scheduleGame, refresh: refreshGames } = useGames(teamId);
+  const { seasons, createSeason } = useSeasons(teamId, { withGamesOnly: true });
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
   const [opponent, setOpponent] = useState('');
   const [format,   setFormat]   = useState('standard');
   const [gameDate, setGameDate] = useState(new Date().toISOString().split('T')[0]);
   const [gameTime, setGameTime] = useState('');
+
+  // Inline season-create prompt state — shown when POST /games returns 409
+  // NO_SEASON and the coach needs to define a season before we can schedule.
+  const [seasonPrompt, setSeasonPrompt] = useState(null); // { name, startDate, endDate }
+  const [savingSeason, setSavingSeason] = useState(false);
+  const [seasonError,  setSeasonError]  = useState(null);
+
+  // Season picker — defaults to the season covering today, falling back to
+  // the most recently-started season with games. Only seasons with games
+  // appear in this picker.
+  const [selectedSeasonId, setSelectedSeasonId] = useState(null);
+  useEffect(() => {
+    if (!seasons || seasons.length === 0) { setSelectedSeasonId(null); return; }
+    if (selectedSeasonId && seasons.some(s => s.id === selectedSeasonId)) return;
+    const today = new Date().toISOString().split('T')[0];
+    const current = seasons.find(s => s.start_date <= today && today <= s.end_date);
+    setSelectedSeasonId((current || seasons[0]).id);
+  }, [seasons, selectedSeasonId]);
+
+  const selectedSeason  = seasons.find(s => s.id === selectedSeasonId) || null;
+  const previousGames   = selectedSeasonId
+    ? games.filter(g => g.season_id === selectedSeasonId && g.status === 'completed')
+    : [];
 
   const upcoming = games.filter(g => g.status !== 'completed');
 
@@ -49,10 +74,51 @@ function GamePicker({ teamId }) {
     if (!opponent.trim()) return;
     setCreating(true);
     try {
-      const game = await scheduleGame({ opponent: opponent.trim(), gameDate, startTime: gameTime || undefined, format });
+      const game = await scheduleGame({
+        opponent: opponent.trim(), gameDate, startTime: gameTime || undefined, format,
+      });
       navigate(`/game/${game.id}`);
+    } catch (err) {
+      if (err.response?.status === 409 && err.response?.data?.code === 'NO_SEASON') {
+        // Seed the prompt with a sensible default range around the game date
+        // so coaches just confirm rather than retype dates.
+        const d    = new Date(gameDate);
+        const year = d.getUTCFullYear();
+        setSeasonPrompt({
+          name:      `${year} Season`,
+          startDate: `${year}-01-01`,
+          endDate:   `${year}-12-31`,
+        });
+        setSeasonError(null);
+      } else {
+        // Surface other failures; don't swallow.
+        setSeasonError(err.response?.data?.error || 'Failed to create game');
+      }
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function confirmCreateSeasonAndGame() {
+    if (!seasonPrompt) return;
+    setSavingSeason(true);
+    setSeasonError(null);
+    try {
+      await createSeason({
+        name:      seasonPrompt.name.trim() || 'Season',
+        startDate: seasonPrompt.startDate,
+        endDate:   seasonPrompt.endDate,
+      });
+      const game = await scheduleGame({
+        opponent: opponent.trim(), gameDate, startTime: gameTime || undefined, format,
+      });
+      setSeasonPrompt(null);
+      await refreshGames();
+      navigate(`/game/${game.id}`);
+    } catch (err) {
+      setSeasonError(err.response?.data?.error || 'Failed to create season');
+    } finally {
+      setSavingSeason(false);
     }
   }
 
@@ -130,11 +196,133 @@ function GamePicker({ teamId }) {
             </div>
           </div>
 
+          {seasonError && !seasonPrompt && (
+            <p style={{
+              marginBottom: 'var(--sp-3)', padding: 'var(--sp-2) var(--sp-3)',
+              background: 'var(--color-red-bg)', border: '1px solid var(--color-red-border)',
+              borderRadius: 'var(--radius-sm)', color: 'var(--color-red)',
+              fontFamily: 'var(--font-body)', fontWeight: 600, fontSize: 'var(--text-xs)',
+            }}>
+              {seasonError}
+            </p>
+          )}
+
           <Button type="submit" variant="primary" disabled={creating || !opponent.trim()} style={{ width: '100%' }}>
             {creating ? 'Creating…' : 'Create Game'}
           </Button>
         </form>
       </div>
+
+      {/* ── Inline season-create prompt ──────────────────── */}
+      {seasonPrompt && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 250,
+            background: 'rgba(0,0,0,0.65)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 'var(--sp-5)',
+          }}
+          onClick={() => !savingSeason && setSeasonPrompt(null)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'var(--color-surface-0)',
+              border: '1px solid var(--color-surface-2)',
+              borderRadius: 'var(--radius-lg)',
+              padding: 'var(--sp-6)',
+              maxWidth: 440, width: '100%',
+            }}
+          >
+            <p className="section-heading" style={{ marginBottom: 'var(--sp-2)' }}>
+              Create Season
+            </p>
+            <p style={{
+              fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-sm)',
+              color: 'var(--color-text-muted)', lineHeight: 1.5, marginBottom: 'var(--sp-4)',
+            }}>
+              No season covers {gameDate}. Create a season so this game can be tracked, then we'll schedule it.
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 'var(--sp-3)', marginBottom: 'var(--sp-4)' }}>
+              <div>
+                <label style={{ display: 'block', fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 10, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 'var(--sp-1)' }}>
+                  Name
+                </label>
+                <input
+                  value={seasonPrompt.name}
+                  onChange={e => setSeasonPrompt(p => ({ ...p, name: e.target.value }))}
+                  style={{ width: '100%', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-3)' }}>
+                <div>
+                  <label style={{ display: 'block', fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 10, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 'var(--sp-1)' }}>
+                    Start Date
+                  </label>
+                  <input
+                    type="date"
+                    value={seasonPrompt.startDate}
+                    onChange={e => setSeasonPrompt(p => ({ ...p, startDate: e.target.value }))}
+                    style={{ width: '100%', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 10, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 'var(--sp-1)' }}>
+                    End Date
+                  </label>
+                  <input
+                    type="date"
+                    value={seasonPrompt.endDate}
+                    onChange={e => setSeasonPrompt(p => ({ ...p, endDate: e.target.value }))}
+                    style={{ width: '100%', boxSizing: 'border-box' }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {seasonError && (
+              <p style={{
+                marginBottom: 'var(--sp-3)', padding: 'var(--sp-2) var(--sp-3)',
+                background: 'var(--color-red-bg)', border: '1px solid var(--color-red-border)',
+                borderRadius: 'var(--radius-sm)', color: 'var(--color-red)',
+                fontFamily: 'var(--font-body)', fontWeight: 600, fontSize: 'var(--text-xs)',
+              }}>
+                {seasonError}
+              </p>
+            )}
+
+            <div style={{ display: 'flex', gap: 'var(--sp-3)' }}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSeasonPrompt(null)}
+                disabled={savingSeason}
+                style={{ flex: 1 }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={confirmCreateSeasonAndGame}
+                disabled={
+                  savingSeason ||
+                  !seasonPrompt.name.trim() ||
+                  !seasonPrompt.startDate ||
+                  !seasonPrompt.endDate ||
+                  seasonPrompt.endDate < seasonPrompt.startDate ||
+                  gameDate < seasonPrompt.startDate ||
+                  gameDate > seasonPrompt.endDate
+                }
+                style={{ flex: 2 }}
+              >
+                {savingSeason ? 'Saving…' : 'Create Season & Schedule'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <p className="section-heading">Scheduled Games</p>
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -169,6 +357,78 @@ function GamePicker({ teamId }) {
             <Button variant="outline" size="sm" onClick={() => navigate(`/game/${g.id}`)}>Open</Button>
           </div>
         ))}
+      </div>
+
+      {/* ── Previous Games ────────────────────────────────── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: 'var(--sp-3)', marginTop: 'var(--sp-8)', marginBottom: 'var(--sp-3)',
+        flexWrap: 'wrap',
+      }}>
+        <p className="section-heading" style={{ margin: 0 }}>Previous Games</p>
+        {seasons.length > 1 && (
+          <select
+            value={selectedSeasonId || ''}
+            onChange={e => setSelectedSeasonId(e.target.value)}
+            aria-label="Select season"
+            style={{ minHeight: 36, padding: 'var(--sp-2) var(--sp-3)', fontSize: 'var(--text-sm)' }}
+          >
+            {seasons.map(s => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        )}
+      </div>
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        {seasons.length === 0 && (
+          <p style={{ padding: 'var(--sp-6)', color: 'var(--color-text-subtle)', fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-sm)' }}>
+            No seasons with games yet.
+          </p>
+        )}
+        {seasons.length > 0 && previousGames.length === 0 && (
+          <p style={{ padding: 'var(--sp-6)', color: 'var(--color-text-subtle)', fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-sm)' }}>
+            No completed games for {selectedSeason?.name || 'this season'}.
+          </p>
+        )}
+        {previousGames.map((g, i) => {
+          const isCompleted = g.status === 'completed';
+          const href = isCompleted ? `/game/${g.id}/summary` : `/game/${g.id}`;
+          const hasScore = g.score_home != null && g.score_away != null;
+          const resultVariant = g.result === 'W' ? 'green' : g.result === 'L' ? 'red' : 'amber';
+          return (
+            <div key={g.id} style={{
+              display: 'flex', alignItems: 'center', gap: 'var(--sp-3)',
+              padding: 'var(--sp-4) var(--sp-5)',
+              borderBottom: i < previousGames.length - 1 ? '1px solid var(--color-surface-2)' : 'none',
+              flexWrap: 'wrap',
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)' }}>
+                  vs {g.opponent}
+                </p>
+                {g.game_date && (
+                  <p style={{ fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginTop: 2 }}>
+                    {formatDateTime(g.game_date, g.start_time, { weekday: 'short', month: 'short', day: 'numeric' })}
+                  </p>
+                )}
+              </div>
+              {hasScore && (
+                <span style={{
+                  fontFamily: 'var(--font-stats)', fontSize: 'var(--text-base)',
+                  color: 'var(--color-text-primary)', fontVariantNumeric: 'tabular-nums',
+                }}>
+                  {g.score_home}&ndash;{g.score_away}
+                </span>
+              )}
+              {isCompleted && g.result
+                ? <Badge variant={resultVariant}>{g.result}</Badge>
+                : <Badge variant="amber">{g.status}</Badge>}
+              <Button variant="outline" size="sm" onClick={() => navigate(href)}>
+                {isCompleted ? 'Summary' : 'Open'}
+              </Button>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -677,11 +937,12 @@ function FaceoffTracker({ gameId, athletes, period }) {
 
 export default function GameMode() {
   const { gameId } = useParams();
+  const navigate   = useNavigate();
   const { team }   = useAuth();
   const toast      = useToast();
   const token      = localStorage.getItem('token');
 
-  const { game, loading, updateScore, updateStatus, refresh: refreshGame } = useGame(gameId);
+  const { game, loading, updateScore, endGame, refresh: refreshGame } = useGame(gameId);
   const {
     connected, liveState, clockTime, mergeAlerts, activating,
     playtime, equityFlags, threats,
@@ -699,6 +960,8 @@ export default function GameMode() {
   const [showStats,      setShowStats]      = useState(false);
   const [aiOpen,         setAiOpen]         = useState(false);
   const [undoing,        setUndoing]        = useState(false);
+  const [endConfirm,     setEndConfirm]     = useState(false);
+  const [ending,         setEnding]         = useState(false);
 
   // HIGH-urgency under-target flags from the socket feed. Equity flags arrive
   // every ~5s via playtime_tick; we only surface the urgent under-target
@@ -810,9 +1073,37 @@ export default function GameMode() {
     }
   }
 
-  function toggleClock() {
-    if (clockRunning) { stopClock(); setClockRunning(false); }
-    else              { startClock(); setClockRunning(true); }
+  // Wait for the server to confirm the clock transition before flipping
+  // local state. Server broadcasts clockRunning via state_update and starts
+  // emitting clock_tick, so visual state will also update from the socket
+  // feed — this just prevents the button from flipping when the request
+  // itself fails (e.g. in-memory state was wiped by a dyno restart and
+  // rehydration isn't possible).
+  async function toggleClock() {
+    const wasRunning = clockRunning;
+    setClockRunning(!wasRunning);
+    try {
+      if (wasRunning) await stopClock();
+      else            await startClock();
+    } catch (err) {
+      setClockRunning(wasRunning);
+      toast.error(err.response?.data?.error || 'Clock action failed');
+    }
+  }
+
+  async function confirmEndGame() {
+    if (ending) return;
+    setEnding(true);
+    try {
+      await endGame();
+      toast.success('Game ended');
+      setEndConfirm(false);
+      navigate(`/game/${gameId}/summary`);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to end game');
+    } finally {
+      setEnding(false);
+    }
   }
 
   return (
@@ -829,7 +1120,7 @@ export default function GameMode() {
           <Badge variant={leading === 'home' ? 'green' : leading === 'away' ? 'red' : 'amber'} dot>
             {leading === 'tied' ? 'Tied' : leading === 'home' ? 'Leading' : 'Trailing'}
           </Badge>
-          <Button variant="outline" size="sm" onClick={() => updateStatus('completed')}>End Game</Button>
+          <Button variant="outline" size="sm" onClick={() => setEndConfirm(true)}>End Game</Button>
         </div>
       </div>
 
@@ -1098,6 +1389,64 @@ export default function GameMode() {
         forceOpen={aiOpen}
         onClose={() => setAiOpen(false)}
       />
+
+      {/* ── End Game confirmation ────────────────────────── */}
+      {endConfirm && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 250,
+            background: 'rgba(0,0,0,0.65)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 'var(--sp-5)',
+          }}
+          onClick={() => !ending && setEndConfirm(false)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'var(--color-surface-0)',
+              border: '1px solid var(--color-surface-2)',
+              borderRadius: 'var(--radius-lg)',
+              padding: 'var(--sp-6)',
+              maxWidth: 420,
+              width: '100%',
+            }}
+          >
+            <p className="section-heading" style={{ marginBottom: 'var(--sp-3)' }}>
+              End Game
+            </p>
+            <p style={{
+              fontFamily: 'var(--font-body)', fontWeight: 300,
+              fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)',
+              lineHeight: 1.5, marginBottom: 'var(--sp-5)',
+            }}>
+              Finalize {homeScore}&ndash;{awayScore} vs {game?.opponent ?? 'opponent'}?
+              Scores, stats, and playtime are saved. Opted-in athletes will
+              receive their post-game summary.
+            </p>
+            <div style={{ display: 'flex', gap: 'var(--sp-3)' }}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setEndConfirm(false)}
+                disabled={ending}
+                style={{ flex: 1 }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={confirmEndGame}
+                disabled={ending}
+                style={{ flex: 2, background: 'var(--color-red)', borderColor: 'var(--color-red)' }}
+              >
+                {ending ? 'Ending…' : 'End Game'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

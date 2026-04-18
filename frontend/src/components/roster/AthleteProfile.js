@@ -7,6 +7,7 @@ import apiClient from '../../config/api';
 import StatCard from '../common/StatCard';
 import Badge from '../common/Badge';
 import Button from '../common/Button';
+import { GRAD_MONTHS } from './gradMonths';
 
 const POS_VARIANT = { Attack: 'red', Midfield: 'gold', Defense: 'blue', Goalie: 'green', FOGO: 'amber' };
 
@@ -40,11 +41,31 @@ export default function AthleteProfile() {
   const { team } = useAuth();
   const { updateAthlete } = useRoster(team?.id);
 
-  const [editing,     setEditing]     = useState(false);
-  const [editEmail,   setEditEmail]   = useState('');
-  const [editSummary, setEditSummary] = useState(false);
-  const [editSkills,  setEditSkills]  = useState({});
-  const [saving,      setSaving]      = useState(false);
+  const [editing,       setEditing]       = useState(false);
+  const [editEmail,     setEditEmail]     = useState('');
+  const [editSummary,   setEditSummary]   = useState(false);
+  const [editGradYear,  setEditGradYear]  = useState('');
+  const [editGradMonth, setEditGradMonth] = useState('');
+  const [editShotHand,  setEditShotHand]  = useState('');
+  const [editCaptain,   setEditCaptain]   = useState(false);
+  const [editDepthTier, setEditDepthTier] = useState('');
+  const [editSkills,    setEditSkills]    = useState({});
+  const [saving,        setSaving]        = useState(false);
+
+  // Previous-season history
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  useEffect(() => {
+    if (!athleteId) return;
+    let cancelled = false;
+    setHistoryLoading(true);
+    apiClient.get(`/athletes/${athleteId}/season-history`)
+      .then(res => { if (!cancelled) setHistory(res.data.seasons || []); })
+      .catch(() => { if (!cancelled) setHistory([]); })
+      .finally(() => { if (!cancelled) setHistoryLoading(false); });
+    return () => { cancelled = true; };
+  }, [athleteId]);
 
   // Share-link state
   const [shares, setShares]         = useState([]);
@@ -104,6 +125,11 @@ export default function AthleteProfile() {
   function openEdit() {
     setEditEmail(athlete?.email || '');
     setEditSummary(athlete?.send_game_summary || false);
+    setEditGradYear(athlete?.graduation_year ?? '');
+    setEditGradMonth(athlete?.graduation_month ?? '');
+    setEditShotHand(athlete?.shot_hand || '');
+    setEditCaptain(athlete?.is_captain || false);
+    setEditDepthTier(athlete?.depth_tier || '');
     setEditSkills({
       skillShooting:       athlete?.skill_shooting       ?? '',
       skillDodging:        athlete?.skill_dodging        ?? '',
@@ -130,6 +156,11 @@ export default function AthleteProfile() {
       await updateAthlete(athleteId, {
         email: editEmail.trim() || null,
         sendGameSummary: editSummary,
+        graduationYear:  editGradYear  !== '' ? parseInt(editGradYear, 10)  : null,
+        graduationMonth: editGradMonth !== '' ? parseInt(editGradMonth, 10) : null,
+        shotHand:        editShotHand || null,
+        isCaptain:       editCaptain,
+        depthTier:       editDepthTier || null,
         ...skillsPayload,
       });
       setEditing(false);
@@ -161,6 +192,15 @@ export default function AthleteProfile() {
   }
 
   const shotPct = athlete.shots > 0 ? Math.min(100, Math.round((Number(athlete.goals) / Number(athlete.shots)) * 100)) : 0;
+  const isGoalie = athlete.primary_position === 'Goalie' || athlete.secondary_position === 'Goalie';
+  const isFOGO   = athlete.primary_position === 'FOGO'   || athlete.secondary_position === 'FOGO';
+  const savesPerGame = athlete.games_played > 0
+    ? (Number(athlete.saves) / Number(athlete.games_played)).toFixed(1)
+    : '0.0';
+  const faceoffTotal = Number(athlete.faceoff_wins ?? 0) + Number(athlete.faceoff_losses ?? 0);
+  const faceoffPct = faceoffTotal > 0
+    ? Math.round((Number(athlete.faceoff_wins) / faceoffTotal) * 100)
+    : 0;
 
   return (
     <div className="page-content">
@@ -188,11 +228,22 @@ export default function AthleteProfile() {
                   {athlete.primary_position}
                 </Badge>
               )}
+              {athlete.is_captain && <Badge variant="gold">Captain</Badge>}
+              {athlete.depth_tier && (
+                <Badge variant="gray">
+                  {athlete.depth_tier.charAt(0).toUpperCase() + athlete.depth_tier.slice(1)}
+                </Badge>
+              )}
               {athlete.status === 'injured' && <Badge variant="red" dot>Injured</Badge>}
             </div>
             <p className="page-subtitle">
-              {athlete.graduation_year ? `Class of ${athlete.graduation_year}` : ''}
-              {athlete.secondary_position ? ` · Also plays ${athlete.secondary_position}` : ''}
+              {[
+                athlete.graduation_year ? `Class of ${athlete.graduation_year}` : null,
+                athlete.secondary_position ? `Also plays ${athlete.secondary_position}` : null,
+                athlete.shot_hand
+                  ? `Shoots ${athlete.shot_hand === 'both' ? 'both hands' : athlete.shot_hand}`
+                  : null,
+              ].filter(Boolean).join(' · ')}
             </p>
           </div>
         </div>
@@ -231,6 +282,88 @@ export default function AthleteProfile() {
         <StatCard label="Ground Balls"  value={athlete.ground_balls  ?? 0} />
         <StatCard label="Status"        value={athlete.status ? athlete.status.charAt(0).toUpperCase() + athlete.status.slice(1) : 'Active'} />
       </div>
+
+      {/* Goalie-specific stats */}
+      {isGoalie && (
+        <div className="grid-4" style={{ marginBottom: 'var(--sp-8)' }}>
+          <StatCard label="Saves"         value={athlete.saves ?? 0} />
+          <StatCard label="Saves / Game"  value={savesPerGame} />
+        </div>
+      )}
+
+      {/* FOGO-specific stats */}
+      {isFOGO && (
+        <div className="grid-4" style={{ marginBottom: 'var(--sp-8)' }}>
+          <StatCard label="Faceoff Wins"   value={athlete.faceoff_wins   ?? 0} />
+          <StatCard label="Faceoff Losses" value={athlete.faceoff_losses ?? 0} />
+          <StatCard label="FO Win %"       value={faceoffPct} unit="%" />
+        </div>
+      )}
+
+      {/* Season History — one row per season the athlete logged events in */}
+      {history.length > 0 && (() => {
+        const cols = ['1.6fr', '52px', '40px', '40px', '40px'];
+        const heads = ['Season', 'GP', 'G', 'A', 'GB'];
+        if (isGoalie) { cols.push('44px'); heads.push('SV'); }
+        if (isFOGO)   { cols.push('52px'); heads.push('FO%'); }
+        const gridTemplateColumns = cols.join(' ');
+        return (
+          <>
+            <p className="section-heading">Season History</p>
+            <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 'var(--sp-8)' }}>
+              <div style={{
+                display: 'grid', gridTemplateColumns,
+                gap: 'var(--sp-3)', padding: 'var(--sp-3) var(--sp-5)',
+                borderBottom: '1px solid var(--color-surface-3)',
+                background: 'var(--color-surface-1)',
+              }}>
+                {heads.map((col, i) => (
+                  <span key={i} className="label" style={{ fontSize: '10px' }}>{col}</span>
+                ))}
+              </div>
+              {history.map((s, i, arr) => {
+                const foTotal = Number(s.faceoff_wins ?? 0) + Number(s.faceoff_losses ?? 0);
+                const foPct   = foTotal > 0 ? Math.round((Number(s.faceoff_wins) / foTotal) * 100) : 0;
+                return (
+                  <div
+                    key={s.season_id}
+                    style={{
+                      display: 'grid', gridTemplateColumns,
+                      gap: 'var(--sp-3)', padding: 'var(--sp-4) var(--sp-5)',
+                      borderBottom: i < arr.length - 1 ? '1px solid var(--color-surface-2)' : 'none',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <span style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)' }}>
+                      {s.season_name}
+                    </span>
+                    {[s.games_played, s.goals, s.assists, s.ground_balls].map((val, idx) => (
+                      <span key={idx} style={{ fontFamily: 'var(--font-stats)', fontSize: 'var(--text-base)', color: 'var(--color-text-secondary)' }}>
+                        {val ?? 0}
+                      </span>
+                    ))}
+                    {isGoalie && (
+                      <span style={{ fontFamily: 'var(--font-stats)', fontSize: 'var(--text-base)', color: 'var(--color-text-secondary)' }}>
+                        {s.saves ?? 0}
+                      </span>
+                    )}
+                    {isFOGO && (
+                      <span style={{ fontFamily: 'var(--font-stats)', fontSize: 'var(--text-base)', color: 'var(--color-text-secondary)' }}>
+                        {`${foPct}%`}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        );
+      })()}
+      {historyLoading && history.length === 0 && (
+        <p style={{ marginBottom: 'var(--sp-8)', fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+          Loading season history…
+        </p>
+      )}
 
       {/* Skill ratings — always shown so coaches know ratings drive line suggestions */}
       <p className="section-heading">Skill Ratings</p>
@@ -382,6 +515,134 @@ export default function AthleteProfile() {
                 <span style={{ fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
                   Email this player their stats after each game
                 </span>
+              </span>
+            </label>
+
+            {/* Graduation — drives the daily auto-deactivate sweep */}
+            <p style={{
+              fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)',
+              letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--color-text-muted)',
+              marginBottom: 'var(--sp-2)',
+            }}>
+              Graduation
+            </p>
+            <p style={{
+              fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-xs)',
+              color: 'var(--color-text-muted)', marginBottom: 'var(--sp-3)',
+            }}>
+              Athlete auto-deactivates the day after this date. Month defaults to June.
+            </p>
+            <div style={{
+              display: 'grid', gridTemplateColumns: '1fr 1fr',
+              gap: 'var(--sp-3)', marginBottom: 'var(--sp-6)',
+            }}>
+              <label>
+                <span style={{ display: 'block', fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: '10px', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 'var(--sp-1)' }}>
+                  Grad Year
+                </span>
+                <input
+                  type="number"
+                  min="2024"
+                  max="2035"
+                  value={editGradYear}
+                  onChange={e => setEditGradYear(e.target.value)}
+                  placeholder="2026"
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius-sm)', padding: '10px 12px',
+                    fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)',
+                    color: 'var(--color-text-primary)', outline: 'none',
+                  }}
+                />
+              </label>
+              <label>
+                <span style={{ display: 'block', fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: '10px', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 'var(--sp-1)' }}>
+                  Grad Month
+                </span>
+                <select
+                  value={editGradMonth}
+                  onChange={e => setEditGradMonth(e.target.value)}
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius-sm)', padding: '10px 12px',
+                    fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)',
+                    color: 'var(--color-text-primary)', outline: 'none',
+                  }}
+                >
+                  <option value="">Default (June)</option>
+                  {GRAD_MONTHS.map(m => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            {/* Role — shot hand, captain, depth tier */}
+            <p style={{
+              fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)',
+              letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--color-text-muted)',
+              marginBottom: 'var(--sp-2)',
+            }}>
+              Role
+            </p>
+            <div style={{
+              display: 'grid', gridTemplateColumns: '1fr 1fr',
+              gap: 'var(--sp-3)', marginBottom: 'var(--sp-4)',
+            }}>
+              <label>
+                <span style={{ display: 'block', fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: '10px', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 'var(--sp-1)' }}>
+                  Shot Hand
+                </span>
+                <select
+                  value={editShotHand}
+                  onChange={e => setEditShotHand(e.target.value)}
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius-sm)', padding: '10px 12px',
+                    fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)',
+                    color: 'var(--color-text-primary)', outline: 'none',
+                  }}
+                >
+                  <option value="">—</option>
+                  <option value="right">Right</option>
+                  <option value="left">Left</option>
+                  <option value="both">Both</option>
+                </select>
+              </label>
+              <label>
+                <span style={{ display: 'block', fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: '10px', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 'var(--sp-1)' }}>
+                  Depth Tier
+                </span>
+                <select
+                  value={editDepthTier}
+                  onChange={e => setEditDepthTier(e.target.value)}
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius-sm)', padding: '10px 12px',
+                    fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)',
+                    color: 'var(--color-text-primary)', outline: 'none',
+                  }}
+                >
+                  <option value="">—</option>
+                  <option value="starter">Starter</option>
+                  <option value="rotation">Rotation</option>
+                  <option value="developmental">Developmental</option>
+                </select>
+              </label>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', cursor: 'pointer', marginBottom: 'var(--sp-6)' }}>
+              <input
+                type="checkbox"
+                checked={editCaptain}
+                onChange={e => setEditCaptain(e.target.checked)}
+                style={{ accentColor: 'var(--color-gold)', width: 16, height: 16, flexShrink: 0 }}
+              />
+              <span style={{ fontFamily: 'var(--font-body)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)' }}>
+                Team Captain
               </span>
             </label>
 

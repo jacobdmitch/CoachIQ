@@ -24,10 +24,12 @@ import { Server as SocketIOServer } from 'socket.io';
 import logger from './services/logger.js';
 import { initializeDatabase, query as dbQuery } from './services/database.js';
 import { errorHandler, asyncHandler } from './middleware/errorHandler.js';
+import { scheduleGraduationSweep } from './services/graduationSweep.js';
 
 // Route imports
 import authRouter from './routes/auth.js';
 import teamsRouter from './routes/teams.js';
+import seasonsRouter from './routes/seasons.js';
 import athletesRouter from './routes/athletes.js';
 import gamesRouter from './routes/games.js';
 import gameLiveRouter from './routes/game-live.js';
@@ -121,6 +123,7 @@ app.get('/health', async (req, res) => {
 // API Routes
 app.use('/api/auth', authRouter);
 app.use('/api/teams', teamsRouter);
+app.use('/api/seasons', seasonsRouter);
 app.use('/api/athletes', athletesRouter);
 app.use('/api/games', gamesRouter);
 app.use('/api/game-live', gameLiveRouter);
@@ -154,6 +157,7 @@ const start = async () => {
   try {
     await initializeDatabase();
     logger.info('Database initialized successfully');
+    scheduleGraduationSweep();
     server.listen(PORT, () => {
       logger.info(`CoachIQ server running on port ${PORT}`);
     });

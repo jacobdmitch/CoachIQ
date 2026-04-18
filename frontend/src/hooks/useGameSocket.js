@@ -117,22 +117,17 @@ export function useGameSocket(gameId, token) {
   // Clock is controlled via REST so the server can manage the tick interval.
   // Socket events carry the results back to all connected clients.
 
+  // Clock control errors propagate so the caller can revert optimistic UI
+  // state and surface a toast — silently swallowing them caused the "Start"
+  // button to flip without the server ever ticking the clock.
   const startClock = useCallback(async () => {
     if (!gameId) return;
-    try {
-      await apiClient.post(`/game-live/${gameId}/clock/start`);
-    } catch (err) {
-      console.error('startClock failed:', err.response?.data?.error || err.message);
-    }
+    await apiClient.post(`/game-live/${gameId}/clock/start`);
   }, [gameId]);
 
   const stopClock = useCallback(async () => {
     if (!gameId) return;
-    try {
-      await apiClient.post(`/game-live/${gameId}/clock/stop`);
-    } catch (err) {
-      console.error('stopClock failed:', err.response?.data?.error || err.message);
-    }
+    await apiClient.post(`/game-live/${gameId}/clock/stop`);
   }, [gameId]);
 
   const logGoal = useCallback(async (athleteId, assistAthleteId) => {

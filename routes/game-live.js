@@ -11,6 +11,7 @@ import { broadcastGameUpdate } from './game-sync.js';
 import { gameStates, playtimeTrackers, clockIntervals } from '../services/liveGameStore.js';
 import { resolveSituation } from '../services/situationResolver.js';
 import { computeOpposingThreats } from '../services/opponentScoutingService.js';
+import { sendPostGameSummaries } from '../services/emailService.js';
 
 const subSchema = z.object({
   playerIn: z.string().uuid(),
@@ -95,6 +96,68 @@ function stopClockInterval(gameId) {
 }
 
 /**
+ * Resolve the in-memory GameStateManager for a game, rehydrating from the
+ * latest snapshot if the in-memory entry is missing.
+ *
+ * In-memory state lives in the `gameStates` Map but is wiped whenever the
+ * server process restarts (Render dyno cycles, deploys, etc.). When that
+ * happens, follow-up requests for an active game would otherwise 400 with
+ * "Game not initialized" even though the snapshot in `game_sessions` is
+ * recoverable.
+ *
+ * Returns null when there is no in-memory state and no usable snapshot —
+ * callers should treat that as "the game has not been started yet."
+ *
+ * The clock is always rehydrated stopped: the server-side tick interval
+ * died with the previous process, so we surface the snapshot's clockTime
+ * but require the coach to hit Start again. Per-player playtime totals from
+ * before the restart are not restored to the in-memory tracker (historical
+ * minutes live in the playtime_log table); on-field players are marked
+ * subbed-in as of the rehydrate moment so forward tracking continues.
+ */
+async function ensureGameState(gameId) {
+  let gameState = gameStates.get(gameId);
+  if (gameState) return gameState;
+
+  const snapshot = await loadGameStateSnapshot(gameId);
+  if (!snapshot) return null;
+
+  const gameRes = await query('SELECT * FROM games WHERE id = $1', [gameId]);
+  if (gameRes.rows.length === 0) return null;
+  const game = gameRes.rows[0];
+
+  const rosterRes = await query(
+    'SELECT * FROM athletes WHERE team_id = $1 AND status = $2',
+    [game.team_id, 'active']
+  );
+  const athletes = rosterRes.rows;
+
+  gameState = new GameStateManager(game, athletes);
+  gameState.state          = snapshot.state          ?? gameState.state;
+  gameState.period         = snapshot.period         ?? gameState.period;
+  gameState.clockTime      = snapshot.clockTime      ?? 0;
+  gameState.clockRunning   = false;
+  gameState.startTime      = null;
+  gameState.homeScore      = snapshot.homeScore      ?? 0;
+  gameState.awayScore      = snapshot.awayScore      ?? 0;
+  gameState.fieldPositions = snapshot.fieldPositions ?? gameState.fieldPositions;
+  gameState.bench          = snapshot.bench          ?? gameState.bench;
+  gameState.subQueue       = snapshot.subQueue       ?? [];
+
+  const playtimeTracker = new PlaytimeTracker(athletes, 15);
+  const now = Date.now();
+  for (const athleteId of Object.values(gameState.fieldPositions)) {
+    if (athleteId) playtimeTracker.subIn(athleteId, now);
+  }
+
+  gameStates.set(gameId, gameState);
+  playtimeTrackers.set(gameId, playtimeTracker);
+
+  logger.info(`Game state rehydrated from snapshot: ${gameId}`);
+  return gameState;
+}
+
+/**
  * POST /:gameId/start
  * Start a game and initialize GameStateManager.
  * Accepts optional startingLineup: { goalie, field_0, field_1, ... }
@@ -168,10 +231,10 @@ router.post(
   authenticateToken,
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
-    const gameState = gameStates.get(gameId);
+    const gameState = await ensureGameState(gameId);
 
     if (!gameState) {
-      throw new AppError('Game not initialized', 400);
+      throw new AppError('Game not initialized. Start the game before using the clock.', 400);
     }
 
     const event = gameState.startClock();
@@ -180,6 +243,7 @@ router.post(
     }
 
     startClockInterval(gameId);
+    await saveGameStateSnapshot(gameId, req.coachId, gameState);
     broadcastGameUpdate(gameId, 'state_update', { event, state: gameState.getState() });
     logger.info(`Clock started: ${gameId}`);
 
@@ -200,10 +264,10 @@ router.post(
   authenticateToken,
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
-    const gameState = gameStates.get(gameId);
+    const gameState = await ensureGameState(gameId);
 
     if (!gameState) {
-      throw new AppError('Game not initialized', 400);
+      throw new AppError('Game not initialized. Start the game before using the clock.', 400);
     }
 
     const event = gameState.stopClock();
@@ -212,6 +276,7 @@ router.post(
     }
 
     stopClockInterval(gameId);
+    await saveGameStateSnapshot(gameId, req.coachId, gameState);
     broadcastGameUpdate(gameId, 'state_update', { event, state: gameState.getState() });
     logger.info(`Clock stopped: ${gameId}`);
 
@@ -670,36 +735,51 @@ router.get(
 
 /**
  * POST /:gameId/end
- * End the game and save final state
+ * End the game and save final state.
+ *
+ * Tolerant of two recovery cases:
+ *  - In-memory state is missing but a snapshot exists → rehydrate, then end.
+ *  - Neither in-memory state nor snapshot exists → just transition the games
+ *    row so a coach can force-end an orphaned game after a dyno restart.
+ *
+ * Post-game stat-summary emails fire only when this call actually transitions
+ * the game from non-completed to completed (driven by RETURNING on the UPDATE).
+ * That guards against duplicate emails if the endpoint is retried.
  */
 router.post(
   '/:gameId/end',
   authenticateToken,
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
-    const gameState = gameStates.get(gameId);
+    const gameState = await ensureGameState(gameId);
 
-    if (!gameState) {
-      throw new AppError('Game not initialized', 400);
+    if (gameState) {
+      gameState.state = 'COMPLETED';
     }
 
-    gameState.state = 'COMPLETED';
+    // Update games table. Only transitions if the game wasn't already
+    // completed; RETURNING.rows is empty otherwise, which short-circuits
+    // the email send below.
+    const updateRes = gameState
+      ? await query(
+          `UPDATE games SET score_home = $1, score_away = $2, status = 'completed'
+           WHERE id = $3 AND status != 'completed' RETURNING *`,
+          [gameState.homeScore, gameState.awayScore, gameId]
+        )
+      : await query(
+          `UPDATE games SET status = 'completed'
+           WHERE id = $1 AND status != 'completed' RETURNING *`,
+          [gameId]
+        );
 
-    // Persist final state to database
+    // Mark any active session as ended (writes final state if we have one).
     await query(
-      `UPDATE games SET
-        score_home = $1,
-        score_away = $2,
-        status = 'completed'
-      WHERE id = $3`,
-      [gameState.homeScore, gameState.awayScore, gameId]
-    );
-
-    // Mark game session as ended
-    await query(
-      `UPDATE game_sessions SET status = 'ended', game_state = $1, updated_at = NOW()
-       WHERE game_id = $2 AND status = 'active'`,
-      [JSON.stringify(gameState.getState()), gameId]
+      gameState
+        ? `UPDATE game_sessions SET status = 'ended', game_state = $1, updated_at = NOW()
+           WHERE game_id = $2 AND status = 'active'`
+        : `UPDATE game_sessions SET status = 'ended', updated_at = NOW()
+           WHERE game_id = $1 AND status = 'active'`,
+      gameState ? [JSON.stringify(gameState.getState()), gameId] : [gameId]
     );
 
     // Clean up memory and clock interval
@@ -707,11 +787,51 @@ router.post(
     gameStates.delete(gameId);
     playtimeTrackers.delete(gameId);
 
+    // Fire post-game stat-summary emails for opted-in athletes. This block
+    // is duplicated from PATCH /games/:id (transition-to-completed path);
+    // both endpoints can complete a game and both must trigger the same
+    // notification. Kept inline rather than extracted to avoid touching
+    // routes/games.js as part of this fix.
+    if (updateRes.rows.length > 0) {
+      const completedGame = updateRes.rows[0];
+      try {
+        const [statsRes, teamRes] = await Promise.all([
+          query(
+            `SELECT
+               a.id AS athlete_id, a.first_name, a.last_name, a.email, a.send_game_summary,
+               COUNT(CASE WHEN ge.event_type = 'goal'         THEN 1 END) AS goals,
+               COUNT(CASE WHEN ge.event_type = 'assist'       THEN 1 END) AS assists,
+               COUNT(CASE WHEN ge.event_type = 'shot'         THEN 1 END) AS shots,
+               COUNT(CASE WHEN ge.event_type = 'ground_ball'  THEN 1 END) AS ground_balls,
+               COUNT(CASE WHEN ge.event_type = 'turnover'     THEN 1 END) AS turnovers,
+               COUNT(CASE WHEN ge.event_type = 'save'         THEN 1 END) AS saves,
+               COUNT(CASE WHEN ge.event_type = 'faceoff_win'  THEN 1 END) AS faceoff_wins,
+               COUNT(CASE WHEN ge.event_type = 'faceoff_loss' THEN 1 END) AS faceoff_losses,
+               COALESCE(SUM(pl.minutes_played), 0)                          AS minutes_played
+             FROM athletes a
+             LEFT JOIN game_events ge ON a.id = ge.athlete_id AND ge.game_id = $1
+             LEFT JOIN playtime_log pl ON a.id = pl.athlete_id AND pl.game_id = $1
+             WHERE a.team_id = $2 AND a.send_game_summary = true AND a.email IS NOT NULL
+             GROUP BY a.id, a.first_name, a.last_name, a.email, a.send_game_summary`,
+            [gameId, completedGame.team_id]
+          ),
+          query('SELECT team_name AS name FROM teams WHERE id = $1', [completedGame.team_id]),
+        ]);
+        const teamName = teamRes.rows[0]?.name || 'Your Team';
+        sendPostGameSummaries(completedGame, statsRes.rows, teamName).catch(err =>
+          logger.error(`Post-game email error: ${err.message}`)
+        );
+      } catch (err) {
+        logger.error(`Failed to fetch data for post-game emails: ${err.message}`);
+      }
+    }
+
+    broadcastGameUpdate(gameId, 'state_update', { state: gameState?.getState() || null });
     logger.info(`Game ended: ${gameId}`);
 
     res.json({
       success: true,
-      finalState: gameState.getState(),
+      finalState: gameState ? gameState.getState() : null,
     });
   })
 );

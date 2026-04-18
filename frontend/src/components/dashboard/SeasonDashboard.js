@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useDashboard } from '../../hooks/useDashboard';
 import { useGames } from '../../hooks/useGame';
+import { useSeasons } from '../../hooks/useSeasons';
 import StatCard from '../common/StatCard';
 import Badge from '../common/Badge';
 import Button from '../common/Button';
@@ -111,7 +112,28 @@ function ScheduleModal({ teamId, onClose, onSaved }) {
 export default function SeasonDashboard() {
   const { team, coach } = useAuth();
   const navigate = useNavigate();
-  const { data, loading, error, refresh } = useDashboard(team?.id);
+  const { seasons } = useSeasons(team?.id, { withGamesOnly: true });
+  const [selectedSeasonId, setSelectedSeasonId] = useState(null);
+
+  // Default the picker to the season covering today, falling back to the most
+  // recent season. Runs once per seasons change and only when nothing is
+  // selected yet so manual selections stick across refreshes.
+  const defaultSeasonId = useMemo(() => {
+    if (!seasons || seasons.length === 0) return null;
+    const today = new Date().toISOString().split('T')[0];
+    const covering = seasons.find(s => s.start_date <= today && today <= s.end_date);
+    if (covering) return covering.id;
+    // Seasons come back ordered by start_date DESC from the API
+    return seasons[0].id;
+  }, [seasons]);
+
+  useEffect(() => {
+    if (selectedSeasonId == null && defaultSeasonId) {
+      setSelectedSeasonId(defaultSeasonId);
+    }
+  }, [defaultSeasonId, selectedSeasonId]);
+
+  const { data, loading, error, refresh } = useDashboard(team?.id, selectedSeasonId);
   const [showSchedule, setShowSchedule] = useState(false);
 
   // ─── Loading ──────────────────────────────────────────────
@@ -187,9 +209,33 @@ export default function SeasonDashboard() {
       <div className="page-header">
         <div>
           <h1 className="page-title">{team.teamName} <span>Overview</span></h1>
-          <p className="page-subtitle">{team.season} Season</p>
+          <p className="page-subtitle">
+            {seasons.find(s => s.id === selectedSeasonId)?.name || `${team.season} Season`}
+          </p>
         </div>
-        <div style={{ display: 'flex', gap: 'var(--sp-3)' }}>
+        <div style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'center' }}>
+          {seasons.length > 0 && (
+            <select
+              value={selectedSeasonId || ''}
+              onChange={e => setSelectedSeasonId(e.target.value || null)}
+              style={{
+                background: 'var(--color-surface-2)',
+                border: '1px solid var(--color-surface-3)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--color-text-primary)',
+                fontFamily: 'var(--font-body)',
+                fontWeight: 300,
+                fontSize: 'var(--text-sm)',
+                padding: '6px var(--sp-3)',
+                outline: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              {seasons.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          )}
           <Button variant="ghost" size="sm" onClick={refresh}>Refresh</Button>
           <Button variant="outline" size="sm" onClick={() => setShowSchedule(true)}>+ Schedule Game</Button>
         </div>
@@ -229,13 +275,22 @@ export default function SeasonDashboard() {
                 No completed games yet.
               </p>
             ) : recentGames.map((game, i) => (
-              <div key={game.id} style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--sp-4)',
-                padding: 'var(--sp-4) var(--sp-5)',
-                borderBottom: i < recentGames.length - 1 ? '1px solid var(--color-surface-2)' : 'none',
-              }}>
+              <Link
+                key={game.id}
+                to={`/game/${game.id}/summary`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--sp-4)',
+                  padding: 'var(--sp-4) var(--sp-5)',
+                  borderBottom: i < recentGames.length - 1 ? '1px solid var(--color-surface-2)' : 'none',
+                  textDecoration: 'none',
+                  color: 'inherit',
+                  transition: 'background var(--ease-base)',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--color-surface-1)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
                 <Badge variant={game.result === 'W' ? 'green' : game.result === 'L' ? 'red' : 'amber'} dot>
                   {game.result || '—'}
                 </Badge>
@@ -250,7 +305,7 @@ export default function SeasonDashboard() {
                 <span style={{ fontFamily: 'var(--font-stats)', fontSize: 'var(--text-lg)', color: 'var(--color-text-secondary)', letterSpacing: 1 }}>
                   {game.score_home}–{game.score_away}
                 </span>
-              </div>
+              </Link>
             ))}
           </div>
         </div>

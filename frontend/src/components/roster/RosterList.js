@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useRoster } from '../../hooks/useRoster';
 import Badge from '../common/Badge';
 import Button from '../common/Button';
+import { GRAD_MONTHS } from './gradMonths';
 
 const POS_VARIANT = { Attack: 'red', Midfield: 'gold', Defense: 'blue', Goalie: 'green', FOGO: 'amber' };
 const POSITIONS   = ['Attack', 'Midfield', 'Defense', 'Goalie', 'FOGO'];
@@ -11,7 +12,8 @@ const FILTERS     = ['All', ...POSITIONS];
 
 const EMPTY_FORM = {
   firstName: '', lastName: '', jerseyNumber: '',
-  primaryPosition: '', graduationYear: '',
+  primaryPosition: '', graduationYear: '', graduationMonth: '',
+  shotHand: '', isCaptain: false, depthTier: '',
   email: '', sendGameSummary: false,
 };
 
@@ -27,6 +29,10 @@ function AthleteModal({ initial, onSave, onClose, saving }) {
           jerseyNumber:    initial.jersey_number     ?? '',
           primaryPosition: initial.primary_position  || '',
           graduationYear:  initial.graduation_year   ?? '',
+          graduationMonth: initial.graduation_month  ?? '',
+          shotHand:        initial.shot_hand         || '',
+          isCaptain:       initial.is_captain        || false,
+          depthTier:       initial.depth_tier        || '',
           email:           initial.email             || '',
           sendGameSummary: initial.send_game_summary || false,
         }
@@ -44,6 +50,10 @@ function AthleteModal({ initial, onSave, onClose, saving }) {
       jerseyNumber:    form.jerseyNumber !== '' ? parseInt(form.jerseyNumber, 10) : null,
       primaryPosition: form.primaryPosition || null,
       graduationYear:  form.graduationYear !== '' ? parseInt(form.graduationYear, 10) : null,
+      graduationMonth: form.graduationMonth !== '' ? parseInt(form.graduationMonth, 10) : null,
+      shotHand:        form.shotHand || null,
+      isCaptain:       form.isCaptain,
+      depthTier:       form.depthTier || null,
       email:           form.email.trim() || null,
       sendGameSummary: form.sendGameSummary,
     });
@@ -104,7 +114,7 @@ function AthleteModal({ initial, onSave, onClose, saving }) {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--sp-4)', marginBottom: 'var(--sp-6)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-4)', marginBottom: 'var(--sp-4)' }}>
             <div>
               <label style={labelStyle}>Jersey #</label>
               <input style={inputStyle} type="number" min="0" max="99" value={form.jerseyNumber} onChange={e => set('jerseyNumber', e.target.value)} placeholder="00" />
@@ -116,11 +126,56 @@ function AthleteModal({ initial, onSave, onClose, saving }) {
                 {POSITIONS.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-4)', marginBottom: 'var(--sp-4)' }}>
             <div>
               <label style={labelStyle}>Grad Year</label>
               <input style={inputStyle} type="number" min="2024" max="2035" value={form.graduationYear} onChange={e => set('graduationYear', e.target.value)} placeholder="2026" />
             </div>
+            <div>
+              <label style={labelStyle}>
+                Grad Month <span style={{ fontWeight: 300, textTransform: 'none', letterSpacing: 0 }}>(opt.)</span>
+              </label>
+              <select style={inputStyle} value={form.graduationMonth} onChange={e => set('graduationMonth', e.target.value)}>
+                <option value="">Default (June)</option>
+                {GRAD_MONTHS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+              </select>
+            </div>
           </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-4)', marginBottom: 'var(--sp-6)' }}>
+            <div>
+              <label style={labelStyle}>Shot Hand</label>
+              <select style={inputStyle} value={form.shotHand} onChange={e => set('shotHand', e.target.value)}>
+                <option value="">—</option>
+                <option value="right">Right</option>
+                <option value="left">Left</option>
+                <option value="both">Both</option>
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Depth Tier</label>
+              <select style={inputStyle} value={form.depthTier} onChange={e => set('depthTier', e.target.value)}>
+                <option value="">—</option>
+                <option value="starter">Starter</option>
+                <option value="rotation">Rotation</option>
+                <option value="developmental">Developmental</option>
+              </select>
+            </div>
+          </div>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', marginBottom: 'var(--sp-5)', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={form.isCaptain}
+              onChange={e => set('isCaptain', e.target.checked)}
+              style={{ width: 18, height: 18, accentColor: 'var(--color-gold)', cursor: 'pointer', flexShrink: 0 }}
+            />
+            <span style={{ fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
+              Team Captain
+            </span>
+          </label>
 
           <div style={{ marginBottom: 'var(--sp-5)' }}>
             <label style={labelStyle}>Email (optional)</label>
@@ -295,6 +350,7 @@ export default function RosterList() {
               <span style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)', letterSpacing: '0.3px' }}>
                 {p.first_name} {p.last_name}
               </span>
+              {p.is_captain && <Badge variant="gold">C</Badge>}
               {p.status === 'injured' && <Badge variant="red">INJ</Badge>}
             </Link>
 

@@ -79,16 +79,47 @@ router.get('/:id', authenticateToken, asyncHandler(async (req, res) => {
 // ─── POST / — schedule a game ─────────────────────────────────────────────────
 
 router.post('/', authenticateToken, asyncHandler(async (req, res) => {
-  const { teamId, opponent, gameDate, startTime, location, format = 'standard', notes } = req.body;
+  const { teamId, opponent, gameDate, startTime, location, format = 'standard', notes, seasonId } = req.body;
   if (!teamId || !opponent) throw new AppError('teamId and opponent are required.', 400);
   if (!gameDate) throw new AppError('gameDate is required.', 400);
 
   await requireTeamAccess(req.coachId, teamId);
 
+  // Resolve season_id: caller-supplied season must match the date + team;
+  // otherwise look up the season whose date range covers game_date. The
+  // seasons exclusion constraint guarantees at most one match.
+  let resolvedSeasonId;
+  if (seasonId) {
+    const { rows } = await query(
+      `SELECT id FROM seasons
+        WHERE id = $1 AND team_id = $2
+          AND $3::date BETWEEN start_date AND end_date`,
+      [seasonId, teamId, gameDate]
+    );
+    if (rows.length === 0) {
+      throw new AppError('Provided seasonId does not cover gameDate for this team.', 400);
+    }
+    resolvedSeasonId = rows[0].id;
+  } else {
+    const { rows } = await query(
+      `SELECT id FROM seasons
+        WHERE team_id = $1 AND $2::date BETWEEN start_date AND end_date`,
+      [teamId, gameDate]
+    );
+    if (rows.length === 0) {
+      throw new AppError(
+        'No season covers that date. Create a season for this team first.',
+        409,
+        'NO_SEASON'
+      );
+    }
+    resolvedSeasonId = rows[0].id;
+  }
+
   const result = await query(
-    `INSERT INTO games (team_id, opponent, game_date, start_time, location, format, status, notes)
-     VALUES ($1, $2, $3, $4, $5, $6, 'scheduled', $7) RETURNING *`,
-    [teamId, opponent, gameDate, startTime || null, location || null, format, notes || null]
+    `INSERT INTO games (team_id, opponent, game_date, start_time, location, format, status, notes, season_id)
+     VALUES ($1, $2, $3, $4, $5, $6, 'scheduled', $7, $8) RETURNING *`,
+    [teamId, opponent, gameDate, startTime || null, location || null, format, notes || null, resolvedSeasonId]
   );
 
   logger.info(`Game scheduled: vs ${opponent} for team ${teamId}`);

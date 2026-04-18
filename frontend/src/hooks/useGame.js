@@ -78,5 +78,16 @@ export function useGame(gameId) {
     setGame(res.data.game);
   }, [gameId]);
 
-  return { game, loading, error, refresh, updateScore, updateStatus };
+  // endGame — finalize the game via /game-live/:gameId/end. Unlike
+  // updateStatus('completed'), this endpoint also stops the server clock
+  // interval, clears in-memory state, closes the session, and fires post-
+  // game summary emails. Throws on failure so callers can toast.
+  const endGame = useCallback(async () => {
+    if (!gameId) throw new Error('No gameId');
+    const res = await apiClient.post(`/game-live/${gameId}/end`);
+    await refresh();
+    return res.data;
+  }, [gameId, refresh]);
+
+  return { game, loading, error, refresh, updateScore, updateStatus, endGame };
 }
