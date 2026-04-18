@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Button from '../common/Button';
 import { useGameSetup } from '../../hooks/useGameSetup';
+import ScoutingTab from './ScoutingTab';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -269,6 +270,11 @@ export default function GameSetup({ game, onGameStarted }) {
 
   const [pickerSlot, setPickerSlot] = useState(null);
 
+  // Track the linked scouting roster id locally so switching between tabs
+  // after linking still picks up the scouting roster on re-mount.
+  const [opposingTeamIdLocal, setOpposingTeamIdLocal] = useState(game.opposing_team_id);
+  useEffect(() => { setOpposingTeamIdLocal(game.opposing_team_id); }, [game.opposing_team_id]);
+
   const positions = POSITION_LAYOUT[game.format] || POSITION_LAYOUT.standard;
   const situations = game.format === '6s' ? SITUATION_TYPES_6S : SITUATION_TYPES;
 
@@ -336,7 +342,7 @@ export default function GameSetup({ game, onGameStarted }) {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 'var(--sp-5)', borderBottom: '1px solid var(--color-surface-2)' }}>
-        {['lineup', 'situations'].map(t => (
+        {['lineup', 'situations', 'scouting'].map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -352,7 +358,7 @@ export default function GameSetup({ game, onGameStarted }) {
               minHeight: 44,
             }}
           >
-            {t === 'lineup' ? 'Lineup' : 'Situations'}
+            {t === 'lineup' ? 'Lineup' : t === 'situations' ? 'Situations' : 'Scouting'}
           </button>
         ))}
       </div>
@@ -479,6 +485,14 @@ export default function GameSetup({ game, onGameStarted }) {
             ))}
           </div>
         </>
+      )}
+
+      {/* ── Scouting Tab ─────────────────────────────────────────────────── */}
+      {tab === 'scouting' && (
+        <ScoutingTab
+          game={{ ...game, opposing_team_id: opposingTeamIdLocal }}
+          onGameUpdated={(newId) => setOpposingTeamIdLocal(newId)}
+        />
       )}
 
       {/* Player picker modal */}

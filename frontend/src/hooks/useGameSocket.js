@@ -1,106 +1,158 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import apiClient from '../config/api';
+import { SyncClient } from '../services/syncClient';
+import { LocalGameState } from '../services/localGameState';
+import { listPending } from '../services/offlineQueue';
 
 const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || window.location.origin;
 
 /**
- * useGameSocket — manages the Socket.io connection for a live game.
+ * useGameSocket — manages the live-game connection.
  *
- * Connects to the /game namespace when gameId is provided, joins the game room,
- * and returns live game state. Clock and score are controlled via REST calls
- * (POST /game-live/:gameId/clock/start, etc.) — the server then broadcasts
- * updates to all connected clients via socket.
+ * Online behavior (unchanged): connects to the /game namespace, joins the
+ * game room, and renders liveState from server broadcasts. Clock/score/subs
+ * flow through REST; the server persists and broadcasts back.
+ *
+ * Offline behavior (phase 3): mutations route through a SyncClient that
+ * queues to IndexedDB when disconnected, and replays on reconnect using
+ * pre-assigned idempotencyKeys. While queued, a LocalGameState simulator
+ * applies the mutation optimistically so the UI keeps moving. After the
+ * queue drains, the client reconciles from /events-since/:seqNo so any
+ * co-coach edits made during the outage are pulled in.
  *
  * @param {string} gameId - The game to join (null = no connection)
  * @param {string} token  - JWT auth token
  */
 export function useGameSocket(gameId, token) {
-  const socketRef = useRef(null);
+  const socketRef     = useRef(null);
+  const syncRef       = useRef(null);
+  const localStateRef = useRef(null);
 
-  const [connected,    setConnected]    = useState(false);
-  const [liveState,    setLiveState]    = useState(null);  // full game state from server
-  const [clockTime,    setClockTime]    = useState(null);  // seconds elapsed in period
-  const [events,       setEvents]       = useState([]);    // game event log
-  const [mergeAlerts,  setMergeAlerts]  = useState([]);    // sub queue conflict alerts
-  const [activating,   setActivating]   = useState(false); // batch-sub in-flight
-  const [playtime,     setPlaytime]     = useState([]);    // live per-athlete playtime summary
-  const [equityFlags,  setEquityFlags]  = useState([]);    // live playtime equity flags
-  const [threats,      setThreats]      = useState([]);    // opposing-player threat ranking
+  const [connected,    setConnected]    = useState(false);  // socket connected
+  const [online,       setOnline]       = useState(true);   // REST reachable
+  const [queueLength,  setQueueLength]  = useState(0);      // pending ops in IDB
+  const [liveState,    setLiveState]    = useState(null);
+  const [clockTime,    setClockTime]    = useState(null);
+  const [events,       setEvents]       = useState([]);
+  const [mergeAlerts,  setMergeAlerts]  = useState([]);
+  const [activating,   setActivating]   = useState(false);
+  const [playtime,     setPlaytime]     = useState([]);
+  const [equityFlags,  setEquityFlags]  = useState([]);
+  const [threats,      setThreats]      = useState([]);
 
+  // ─── Helper: apply a full server snapshot to our local caches ─────────────
+  const applySnapshot = useCallback((snapshot) => {
+    if (!snapshot) return;
+    setLiveState(snapshot);
+    setClockTime(snapshot.clockTime ?? null);
+    if (localStateRef.current) localStateRef.current.replace(snapshot);
+    else localStateRef.current = new LocalGameState(snapshot);
+  }, []);
+
+  // ─── Sync client lifecycle ────────────────────────────────────────────────
   useEffect(() => {
-    if (!gameId || !token) return;
+    if (!gameId || !token) return undefined;
+
+    const sync = new SyncClient({
+      gameId,
+      apiClient,
+      onOnline:  () => setOnline(true),
+      onOffline: () => setOnline(false),
+      onQueueChange: (ops) => setQueueLength(ops.length),
+      onReconcile: ({ snapshot, latestSeqNo }) => {
+        applySnapshot(snapshot);
+        if (typeof latestSeqNo === 'number') sync.setLatestSeqNo(latestSeqNo);
+      },
+      onError: (err) => {
+        // eslint-disable-next-line no-console
+        console.error('sync error:', err?.response?.data?.error || err.message);
+      },
+    });
+    syncRef.current = sync;
+    sync.start();
+
+    // Prime the initial queue-length badge
+    listPending(gameId).then(ops => setQueueLength(ops.length)).catch(() => {});
+
+    // Pull the initial snapshot + seq_no so later reconciles have a cursor.
+    sync.reconcile().catch(() => {});
+
+    return () => {
+      sync.stop();
+      syncRef.current = null;
+    };
+  }, [gameId, token, applySnapshot]);
+
+  // ─── Socket lifecycle ─────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!gameId || !token) return undefined;
 
     const socket = io(`${SOCKET_URL}/game`, {
       auth: { token },
       transports: ['websocket', 'polling'],
     });
-
     socketRef.current = socket;
 
     socket.on('connect', () => {
       setConnected(true);
       socket.emit('join_game', { gameId });
     });
-
     socket.on('disconnect', () => setConnected(false));
 
-    // Full state sync — sent after any major state change (start, period, end)
     socket.on('state_update', ({ state }) => {
-      if (state) {
-        setLiveState(state);
-        setClockTime(state.clockTime ?? null);
+      if (state) applySnapshot(state);
+    });
+
+    socket.on('clock_tick', ({ clockTime: t }) => {
+      setClockTime(t);
+      if (localStateRef.current) {
+        // Keep local state in sync so a late-arriving offline window picks up
+        // the correct clock baseline.
+        const s = localStateRef.current.getState();
+        s.clockTime = t;
+        localStateRef.current.replace(s);
       }
     });
 
-    // Clock tick — emitted every second by the server while clock is running
-    socket.on('clock_tick', ({ clockTime: t }) => {
-      setClockTime(t);
-    });
-
-    // Playtime tick — emitted periodically while the clock runs (every few
-    // seconds) with the current per-athlete summary and equity flags.
     socket.on('playtime_tick', ({ summary, equityFlags: flags }) => {
-      if (Array.isArray(summary))      setPlaytime(summary);
-      if (Array.isArray(flags))        setEquityFlags(flags);
+      if (Array.isArray(summary)) setPlaytime(summary);
+      if (Array.isArray(flags))   setEquityFlags(flags);
     });
 
-    // Opponent threats — emitted after each logged opponent event so the
-    // sideline panel reflects the new score without a refresh.
     socket.on('opponent_threats', ({ threats: list }) => {
       if (Array.isArray(list)) setThreats(list);
     });
 
-    // Score update — emitted after a score change
     socket.on('score_update', ({ state }) => {
       if (state) {
         setLiveState(prev => prev ? { ...prev, homeScore: state.homeScore, awayScore: state.awayScore } : state);
+        if (localStateRef.current) {
+          localStateRef.current.updateScore('home', state.homeScore);
+          localStateRef.current.updateScore('away', state.awayScore);
+        }
       }
     });
 
-    // Substitution — emitted after a successful sub
     socket.on('substitution', ({ state }) => {
       if (state) {
-        setLiveState(state);
+        applySnapshot(state);
         setEvents(prev => [{ type: 'substitution', ts: Date.now() }, ...prev]);
       }
     });
 
-    // Generic game event (goal, penalty, etc.)
     socket.on('game_event', (event) => {
       setEvents(prev => [{ ...event, ts: Date.now() }, ...prev]);
     });
 
-    // Sub queue updated (add/remove entry/move from any connected coach)
     socket.on('queue_update', ({ subQueue, mergeAlerts: alerts }) => {
       setLiveState(prev => prev ? { ...prev, subQueue: subQueue || [] } : prev);
       if (alerts?.length > 0) setMergeAlerts(alerts);
     });
 
-    // Batch sub executed — full state refresh + clear alerts
     socket.on('batch_substitution', ({ state }) => {
       if (state) {
-        setLiveState(state);
+        applySnapshot(state);
         setMergeAlerts([]);
       }
     });
@@ -111,110 +163,112 @@ export function useGameSocket(gameId, token) {
       socketRef.current = null;
       setConnected(false);
     };
-  }, [gameId, token]);
+  }, [gameId, token, applySnapshot]);
 
-  // ─── Clock control (REST, not socket) ────────────────────────────────────────
-  // Clock is controlled via REST so the server can manage the tick interval.
-  // Socket events carry the results back to all connected clients.
+  // ─── Helper: route a mutation through sync + local optimistic apply ───────
+  const send = useCallback(async (method, path, body, localApply) => {
+    const sync = syncRef.current;
+    if (!sync) return null;
 
-  // Clock control errors propagate so the caller can revert optimistic UI
-  // state and surface a toast — silently swallowing them caused the "Start"
-  // button to flip without the server ever ticking the clock.
-  const startClock = useCallback(async () => {
-    if (!gameId) return;
-    await apiClient.post(`/game-live/${gameId}/clock/start`);
-  }, [gameId]);
-
-  const stopClock = useCallback(async () => {
-    if (!gameId) return;
-    await apiClient.post(`/game-live/${gameId}/clock/stop`);
-  }, [gameId]);
-
-  const logGoal = useCallback(async (athleteId, assistAthleteId) => {
-    if (!gameId) return;
-    try {
-      await apiClient.post(`/game-live/${gameId}/event`, {
-        eventType: 'GOAL',
-        athleteId,
-        metadata: assistAthleteId ? { assistAthleteId } : {},
-      });
-    } catch (err) {
-      console.error('logGoal failed:', err.response?.data?.error || err.message);
+    // Optimistic local apply — runs whether online or offline so the UI is
+    // instant either way. Server broadcasts will reconcile any drift.
+    if (localApply && localStateRef.current) {
+      try { localApply(localStateRef.current); } catch { /* ignore */ }
+      const snap = localStateRef.current.getState();
+      setLiveState(snap);
+      if (snap.clockTime != null) setClockTime(snap.clockTime);
     }
-  }, [gameId]);
 
-  // Log a stat event for the opposing team.
-  // eventType is lowercase (matches the DB enum): 'goal','shot','ground_ball',etc.
-  // opposingPlayerId is optional — pass null for an anonymous team-level stat.
-  const logOpponentEvent = useCallback(async (eventType, opposingPlayerId = null, metadata = {}) => {
-    if (!gameId) return;
     try {
-      await apiClient.post(`/game-live/${gameId}/opponent-event`, {
-        eventType,
-        opposingPlayerId,
-        metadata,
-      });
+      return await sync.send(method, path, body);
     } catch (err) {
-      console.error('logOpponentEvent failed:', err.response?.data?.error || err.message);
+      // eslint-disable-next-line no-console
+      console.error(`${method} ${path} failed:`, err?.response?.data?.error || err.message);
+      return null;
     }
-  }, [gameId]);
+  }, []);
 
-  const makeSubstitution = useCallback(async (playerOut, playerIn, position) => {
-    if (!gameId) return;
-    try {
-      await apiClient.post(`/game-live/${gameId}/sub`, { playerIn, playerOut, position });
-    } catch (err) {
-      console.error('makeSubstitution failed:', err.response?.data?.error || err.message);
-    }
-  }, [gameId]);
+  // ─── Clock ────────────────────────────────────────────────────────────────
+  const startClock = useCallback(() => send(
+    'POST', `/game-live/${gameId}/clock/start`, null,
+    (local) => local.startClock()
+  ), [gameId, send]);
 
-  // ─── Sub queue actions ────────────────────────────────────────────────────
+  const stopClock = useCallback(() => send(
+    'POST', `/game-live/${gameId}/clock/stop`, null,
+    (local) => local.stopClock()
+  ), [gameId, send]);
 
+  // ─── Events ───────────────────────────────────────────────────────────────
+  const logGoal = useCallback((athleteId, assistAthleteId) => send(
+    'POST', `/game-live/${gameId}/event`,
+    { eventType: 'GOAL', athleteId, metadata: assistAthleteId ? { assistAthleteId } : {} },
+    (local) => local.logEvent('GOAL', athleteId, assistAthleteId ? { assistAthleteId } : {})
+  ), [gameId, send]);
+
+  // Generic stat logger used by the long-press action menu. eventType values
+  // match the DB enum (GOAL, SHOT, GROUND_BALL, TURNOVER, etc.). Works offline
+  // via the same sync/local-state path as logGoal.
+  const logStat = useCallback((eventType, athleteId, metadata = {}) => send(
+    'POST', `/game-live/${gameId}/event`,
+    { eventType, athleteId, metadata },
+    (local) => local.logEvent(eventType, athleteId, metadata)
+  ), [gameId, send]);
+
+  const logOpponentEvent = useCallback((eventType, opposingPlayerId = null, metadata = {}) => send(
+    'POST', `/game-live/${gameId}/opponent-event`,
+    { eventType, opposingPlayerId, metadata },
+    (local) => local.logOpponentEvent(eventType, opposingPlayerId, metadata)
+  ), [gameId, send]);
+
+  const makeSubstitution = useCallback((playerOut, playerIn, position) => send(
+    'POST', `/game-live/${gameId}/sub`,
+    { playerIn, playerOut, position },
+    (local) => local.executeSubstitution(playerIn, playerOut, position)
+  ), [gameId, send]);
+
+  // ─── Sub queue ────────────────────────────────────────────────────────────
   const addToQueue = useCallback(async (params) => {
-    if (!gameId) return;
-    try {
-      const res = await apiClient.post(`/game-live/${gameId}/sub-queue/add`, params);
-      if (res.data.mergeAlerts?.length > 0) setMergeAlerts(res.data.mergeAlerts);
-    } catch (err) {
-      console.error('addToQueue failed:', err.response?.data?.error || err.message);
+    const result = await send(
+      'POST', `/game-live/${gameId}/sub-queue/add`, params,
+      (local) => local.addToQueue(params.entry || params)
+    );
+    if (result?.response?.mergeAlerts?.length > 0) {
+      setMergeAlerts(result.response.mergeAlerts);
     }
-  }, [gameId]);
+    return result;
+  }, [gameId, send]);
 
-  const removeFromQueue = useCallback(async (queueId) => {
-    if (!gameId) return;
-    try {
-      await apiClient.delete(`/game-live/${gameId}/sub-queue/${queueId}`);
-    } catch (err) {
-      console.error('removeFromQueue failed:', err.response?.data?.error || err.message);
-    }
-  }, [gameId]);
+  const removeFromQueue = useCallback((queueId) => send(
+    'DELETE', `/game-live/${gameId}/sub-queue/${queueId}`, null,
+    (local) => local.removeFromQueue(queueId)
+  ), [gameId, send]);
 
-  const removeMoveFromQueue = useCallback(async (queueId, moveId) => {
-    if (!gameId) return;
-    try {
-      await apiClient.delete(`/game-live/${gameId}/sub-queue/${queueId}/moves/${moveId}`);
-    } catch (err) {
-      console.error('removeMoveFromQueue failed:', err.response?.data?.error || err.message);
-    }
-  }, [gameId]);
+  const removeMoveFromQueue = useCallback((queueId, moveId) => send(
+    'DELETE', `/game-live/${gameId}/sub-queue/${queueId}/moves/${moveId}`, null,
+    (local) => local.removeMoveFromQueue(queueId, moveId)
+  ), [gameId, send]);
 
   const activateQueue = useCallback(async () => {
-    if (!gameId) return;
     setActivating(true);
     try {
-      await apiClient.post(`/game-live/${gameId}/batch-sub`);
+      const result = await send(
+        'POST', `/game-live/${gameId}/batch-sub`, {},
+        (local) => local.executeBatchSub()
+      );
       setMergeAlerts([]);
-    } catch (err) {
-      console.error('activateQueue failed:', err.response?.data?.error || err.message);
+      return result;
     } finally {
       setActivating(false);
     }
-  }, [gameId]);
+  }, [gameId, send]);
 
   const dismissMergeAlerts = useCallback(() => setMergeAlerts([]), []);
 
   return {
     connected,
+    online,
+    queueLength,
     liveState,
     clockTime,
     events,
@@ -226,6 +280,7 @@ export function useGameSocket(gameId, token) {
     startClock,
     stopClock,
     logGoal,
+    logStat,
     logOpponentEvent,
     makeSubstitution,
     addToQueue,

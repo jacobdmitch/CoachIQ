@@ -6,6 +6,7 @@ import { useGames, useGame } from '../../hooks/useGame';
 import { useGameSocket } from '../../hooks/useGameSocket';
 import { useLines } from '../../hooks/useLines';
 import { useRoster } from '../../hooks/useRoster';
+import { useRotations } from '../../hooks/useRotations';
 import { useSeasons } from '../../hooks/useSeasons';
 import apiClient from '../../config/api';
 import Badge from '../common/Badge';
@@ -13,6 +14,7 @@ import Button from '../common/Button';
 import GameSetup from './GameSetup';
 import StagingPanel from './StagingPanel';
 import PlaytimePanel from './PlaytimePanel';
+import PlayerActionMenu from './PlayerActionMenu';
 import OpponentStatsPanel from './OpponentStatsPanel';
 import OpponentThreatsPanel from './OpponentThreatsPanel';
 import GameClocksPanel from './GameClocksPanel';
@@ -944,13 +946,15 @@ export default function GameMode() {
 
   const { game, loading, updateScore, endGame, refresh: refreshGame } = useGame(gameId);
   const {
-    connected, liveState, clockTime, mergeAlerts, activating,
+    connected, online, queueLength,
+    liveState, clockTime, mergeAlerts, activating,
     playtime, equityFlags, threats,
-    startClock, stopClock, logOpponentEvent,
+    startClock, stopClock, logStat, logOpponentEvent,
     addToQueue, removeFromQueue, removeMoveFromQueue, activateQueue,
   } = useGameSocket(gameId, token);
 
   const { lines, createLine } = useLines(team?.id);
+  const { rotations } = useRotations(team?.id);
   const { athletes } = useRoster(team?.id);
 
   const [homeScore,      setHomeScore]      = useState(0);
@@ -962,6 +966,27 @@ export default function GameMode() {
   const [undoing,        setUndoing]        = useState(false);
   const [endConfirm,     setEndConfirm]     = useState(false);
   const [ending,         setEnding]         = useState(false);
+
+  // Long-press action menu. `menuTarget` is set when a coach long-presses a
+  // player row; clearing it closes the menu. `subPairing` holds the first
+  // half of a sub (the player being moved) while we wait for the coach to
+  // tap a partner to complete the pair.
+  const [menuTarget, setMenuTarget] = useState(null);   // { athlete, isOnField, anchor }
+  const [subPairing, setSubPairing] = useState(null);   // { athlete, isOnField }
+
+  // Outdoor / sunlight theme. Persisted under `coachiq.theme`; default 'dark'.
+  // The actual token overrides live in styles/tokens.css under .theme-sunlight.
+  const [theme, setTheme] = useState(() => {
+    try { return localStorage.getItem('coachiq.theme') || 'dark'; }
+    catch { return 'dark'; }
+  });
+  useEffect(() => {
+    document.body.classList.toggle('theme-sunlight', theme === 'sunlight');
+    try { localStorage.setItem('coachiq.theme', theme); } catch { /* ignore */ }
+    // Strip the class if the coach navigates out of Game Mode — it's a
+    // game-time-only mode, not a global preference.
+    return () => { document.body.classList.remove('theme-sunlight'); };
+  }, [theme]);
 
   // HIGH-urgency under-target flags from the socket feed. Equity flags arrive
   // every ~5s via playtime_tick; we only surface the urgent under-target
@@ -1091,6 +1116,56 @@ export default function GameMode() {
     }
   }
 
+  // ─── Long-press action handlers ──────────────────────────────────────────
+  function handlePlayerLongPress({ athlete, isOnField, anchor }) {
+    if (subPairing) {
+      // A sub is already in-flight — use this tap as the partner selection.
+      // Ignore if the tapped player is on the same side as the partial.
+      if (subPairing.isOnField !== isOnField) {
+        completeSubPair(subPairing, { athlete, isOnField });
+      } else {
+        toast.info(`Long-press a ${subPairing.isOnField ? 'bench' : 'field'} player to finish the sub`);
+      }
+      return;
+    }
+    setMenuTarget({ athlete, isOnField, anchor });
+  }
+
+  function handleLogStat(statType) {
+    if (!menuTarget) return;
+    logStat(statType, menuTarget.athlete.id);
+    const pretty = statType.replace(/_/g, ' ').toLowerCase();
+    toast.success(`${pretty}: ${menuTarget.athlete.last_name}`);
+  }
+
+  function handleSubOut() {
+    if (!menuTarget) return;
+    setSubPairing({ athlete: menuTarget.athlete, isOnField: true });
+    toast.info(`Pairing sub — long-press a bench player to swap in for ${menuTarget.athlete.last_name}`);
+  }
+
+  function handleSubIn() {
+    if (!menuTarget) return;
+    setSubPairing({ athlete: menuTarget.athlete, isOnField: false });
+    toast.info(`Pairing sub — long-press a field player to swap out for ${menuTarget.athlete.last_name}`);
+  }
+
+  function completeSubPair(partial, other) {
+    const fieldPlayer = partial.isOnField ? partial.athlete : other.athlete;
+    const benchPlayer = partial.isOnField ? other.athlete   : partial.athlete;
+    const position    = liveState?.fieldPositions
+      ? Object.entries(liveState.fieldPositions).find(([, id]) => id === fieldPlayer.id)?.[0]
+      : null;
+    if (!position) {
+      toast.error('Could not find field position — use Staging panel instead');
+      setSubPairing(null);
+      return;
+    }
+    addToQueue({ type: 'individual', playerIn: benchPlayer.id, playerOut: fieldPlayer.id, position });
+    toast.success(`Queued: ${benchPlayer.last_name} in for ${fieldPlayer.last_name}`);
+    setSubPairing(null);
+  }
+
   async function confirmEndGame() {
     if (ending) return;
     setEnding(true);
@@ -1116,10 +1191,39 @@ export default function GameMode() {
           <p className="page-subtitle">vs {game?.opponent ?? '—'}</p>
         </div>
         <div style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'center', flexWrap: 'wrap' }}>
-          <Badge variant={connected ? 'green' : 'red'} dot>{connected ? 'Live' : 'Offline'}</Badge>
+          {(() => {
+            // Connection badge state machine:
+            //   online + socket connected   → "Live" (green)
+            //   online + socket disconnected → "Reconnecting" (amber)
+            //   REST offline                 → "Offline (N queued)" (red)
+            if (!online) {
+              const label = queueLength > 0 ? `Offline (${queueLength} queued)` : 'Offline';
+              return <Badge variant="red" dot>{label}</Badge>;
+            }
+            if (!connected) return <Badge variant="amber" dot>Reconnecting</Badge>;
+            return <Badge variant="green" dot>Live</Badge>;
+          })()}
           <Badge variant={leading === 'home' ? 'green' : leading === 'away' ? 'red' : 'amber'} dot>
             {leading === 'tied' ? 'Tied' : leading === 'home' ? 'Leading' : 'Trailing'}
           </Badge>
+          <button
+            onClick={() => setTheme(t => (t === 'sunlight' ? 'dark' : 'sunlight'))}
+            aria-pressed={theme === 'sunlight'}
+            aria-label={theme === 'sunlight' ? 'Switch to dark theme' : 'Switch to sunlight theme'}
+            title={theme === 'sunlight' ? 'Sunlight mode on' : 'Sunlight mode off'}
+            style={{
+              minHeight: 36, minWidth: 36, padding: '0 10px',
+              background: theme === 'sunlight' ? 'var(--color-gold-muted)' : 'transparent',
+              border: '1px solid ' + (theme === 'sunlight' ? 'var(--color-gold)' : 'var(--color-surface-3)'),
+              borderRadius: 'var(--radius-sm)',
+              color: theme === 'sunlight' ? 'var(--color-gold)' : 'var(--color-text-muted)',
+              fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)',
+              letterSpacing: '1px', textTransform: 'uppercase',
+              cursor: 'pointer',
+            }}
+          >
+            {theme === 'sunlight' ? '☀ Sun' : '☾ Dark'}
+          </button>
           <Button variant="outline" size="sm" onClick={() => setEndConfirm(true)}>End Game</Button>
         </div>
       </div>
@@ -1279,7 +1383,44 @@ export default function GameMode() {
         athletes={athletes || []}
         playtime={playtime}
         equityFlags={equityFlags}
+        onLongPressPlayer={handlePlayerLongPress}
       />
+
+      {/* ── Sub pairing banner ─────────────────────────── */}
+      {subPairing && (
+        <div
+          onClick={() => setSubPairing(null)}
+          style={{
+            position: 'fixed', left: 0, right: 0, bottom: 16, zIndex: 79,
+            margin: '0 auto', maxWidth: 360, padding: '10px 14px',
+            background: 'var(--color-surface-1, #1a1a1a)',
+            border: '1px solid var(--color-gold, #b5892d)',
+            borderRadius: 'var(--radius-md, 8px)',
+            color: 'var(--color-text-primary, #f2f2f2)',
+            fontFamily: 'var(--font-body, system-ui)',
+            fontSize: 'var(--text-sm, 14px)',
+            textAlign: 'center',
+            cursor: 'pointer',
+            boxShadow: '0 6px 18px rgba(0,0,0,0.4)',
+          }}
+          role="status"
+        >
+          Pairing sub: long-press a {subPairing.isOnField ? 'bench' : 'field'} player — or tap this banner to cancel
+        </div>
+      )}
+
+      {/* ── Long-press action menu ──────────────────────── */}
+      {menuTarget && (
+        <PlayerActionMenu
+          anchor={menuTarget.anchor}
+          athlete={menuTarget.athlete}
+          isOnField={menuTarget.isOnField}
+          onLogStat={handleLogStat}
+          onSubOut={handleSubOut}
+          onSubIn={handleSubIn}
+          onClose={() => setMenuTarget(null)}
+        />
+      )}
 
       {/* ── Opponent Stats Logger ────────────────────────── */}
       <OpponentStatsPanel
@@ -1361,6 +1502,7 @@ export default function GameMode() {
           liveState={liveState}
           athletes={athletes}
           lines={lines}
+          rotations={rotations}
           mergeAlerts={mergeAlerts}
           onAddToQueue={addToQueue}
           onRemoveEntry={removeFromQueue}

@@ -122,3 +122,52 @@
   /* Stat accent line */
   --accent-line: 2px solid var(--color-gold);
 }
+
+/* ═══════════════════════════════════════════════════════════
+   Sunlight theme — outdoor / bright-field mode
+   Activated by adding .theme-sunlight on <body>. Goals:
+     1. Maximum contrast: pure black surfaces, pure white text
+     2. Oversized clock/score/period displays for sideline legibility
+     3. Heavier borders so cards stay defined in glare
+     4. Muted-gold → saturated yellow for instant focus
+   Coaches flip it from the GameMode header. Choice persists in
+   localStorage under `coachiq.theme` ('dark' | 'sunlight').
+   ═══════════════════════════════════════════════════════════ */
+
+body.theme-sunlight {
+  --color-black:       #000000;
+  --color-surface-0:   #000000;
+  --color-surface-1:   #0A0A0A;
+  --color-surface-2:   #141414;
+  --color-surface-3:   #FFFFFF;     /* borders become pure white */
+  --color-surface-4:   #2A2A2A;
+
+  --color-gold:        #FFE066;     /* pushed toward pure yellow */
+  --color-gold-light:  #FFF38A;
+  --color-gold-dim:    #C9A227;
+  --color-gold-muted:  rgba(255, 224, 102, 0.22);
+  --color-gold-border: rgba(255, 224, 102, 0.70);
+
+  --color-text-primary:   #FFFFFF;
+  --color-text-secondary: #FFFFFF;
+  --color-text-muted:     #D1D5DB;
+  --color-text-subtle:    #9CA3AF;
+
+  --color-green:       #4ADE80;
+  --color-red:         #FF6B6B;
+  --color-amber:       #FFC93C;
+
+  /* Key numbers: oversized for readability from 3–5 ft away in sunlight. */
+  --text-2xl:  40px;   /* +25% */
+  --text-3xl:  60px;   /* +25% */
+  --text-4xl:  84px;   /* +31% */
+
+  /* Heavier card borders so surfaces stay delineated in glare. */
+  --card-border: 2px solid var(--color-surface-3);
+
+  /* Drop soft shadows — they wash out outdoors and hurt contrast. */
+  --shadow-sm:  none;
+  --shadow-md:  none;
+  --shadow-lg:  none;
+  --shadow-gold: 0 0 0 2px var(--color-gold);
+}

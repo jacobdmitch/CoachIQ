@@ -82,9 +82,16 @@ export function useGame(gameId) {
   // updateStatus('completed'), this endpoint also stops the server clock
   // interval, clears in-memory state, closes the session, and fires post-
   // game summary emails. Throws on failure so callers can toast.
+  //
+  // After the server confirms end, drop any remaining offline-queue entries
+  // for this game so a stale pending mutation doesn't replay next session.
   const endGame = useCallback(async () => {
     if (!gameId) throw new Error('No gameId');
     const res = await apiClient.post(`/game-live/${gameId}/end`);
+    try {
+      const { clearGame } = await import('../services/offlineQueue');
+      await clearGame(gameId);
+    } catch { /* best-effort cleanup — don't fail end-game on this */ }
     await refresh();
     return res.data;
   }, [gameId, refresh]);

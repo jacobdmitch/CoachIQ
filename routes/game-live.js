@@ -12,17 +12,30 @@ import { gameStates, playtimeTrackers, clockIntervals } from '../services/liveGa
 import { resolveSituation } from '../services/situationResolver.js';
 import { computeOpposingThreats } from '../services/opponentScoutingService.js';
 import { sendPostGameSummaries } from '../services/emailService.js';
+import { withIdempotency } from '../services/idempotencyStore.js';
+import { requireGameRole, ensureHeadCoachParticipant } from '../middleware/gameRole.js';
+
+// Shared idempotency fields for mutation endpoints. Clients generate a v4
+// UUID for each logical action; server replays short-circuit to the cached
+// response. clientTimestamp preserves ordering when offline-queued events
+// land out of order.
+const idempotencyFields = {
+  idempotencyKey:   z.string().uuid().optional(),
+  clientTimestamp:  z.number().int().positive().optional(),
+};
 
 const subSchema = z.object({
   playerIn: z.string().uuid(),
   playerOut: z.string().uuid(),
   position: z.string().max(20).optional(),
+  ...idempotencyFields,
 });
 
 const eventSchema = z.object({
   eventType: z.string().min(1).max(30),
   athleteId: z.string().uuid(),
   metadata: z.record(z.any()).optional(),
+  ...idempotencyFields,
 });
 
 const OPPONENT_EVENT_TYPES = [
@@ -35,11 +48,13 @@ const opponentEventSchema = z.object({
   eventType: z.enum(OPPONENT_EVENT_TYPES),
   opposingPlayerId: z.string().uuid().nullable().optional(),
   metadata: z.record(z.any()).optional(),
+  ...idempotencyFields,
 });
 
 const scoreSchema = z.object({
   team: z.enum(['home', 'away']),
   points: z.number().int().min(0),
+  ...idempotencyFields,
 });
 
 const router = express.Router();
@@ -214,6 +229,10 @@ router.post(
     playtimeTrackers.set(gameId, playtimeTracker);
 
     await saveGameStateSnapshot(gameId, req.coachId, gameState);
+    // Record the starter as head coach of this session. saveGameStateSnapshot
+    // creates the game_sessions row; ensureHeadCoachParticipant adds the
+    // session_participants row so role enforcement downstream recognizes them.
+    await ensureHeadCoachParticipant(gameId, req.coachId);
     broadcastGameUpdate(gameId, 'state_update', { state: gameState.getState() });
 
     logger.info(`Game started: ${gameId}`, { format: game.format, hasStartingLineup: !!startingLineup });
@@ -229,6 +248,7 @@ router.post(
 router.post(
   '/:gameId/clock/start',
   authenticateToken,
+  requireGameRole(['head_coach', 'assistant']),
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
     const gameState = await ensureGameState(gameId);
@@ -262,6 +282,7 @@ router.post(
 router.post(
   '/:gameId/clock/stop',
   authenticateToken,
+  requireGameRole(['head_coach', 'assistant']),
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
     const gameState = await ensureGameState(gameId);
@@ -295,6 +316,7 @@ router.post(
 router.post(
   '/:gameId/period/end',
   authenticateToken,
+  requireGameRole(['head_coach', 'assistant']),
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
     const gameState = gameStates.get(gameId);
@@ -327,6 +349,7 @@ router.post(
 router.post(
   '/:gameId/period/next',
   authenticateToken,
+  requireGameRole(['head_coach', 'assistant']),
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
     const gameState = gameStates.get(gameId);
@@ -358,46 +381,54 @@ router.post(
 router.post(
   '/:gameId/sub',
   authenticateToken,
+  requireGameRole(['head_coach', 'assistant']),
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
     const parsed = subSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new AppError(`Invalid input: ${parsed.error.issues.map(i => i.message).join(', ')}`, 400);
     }
-    const { playerIn, playerOut, position } = parsed.data;
+    const { playerIn, playerOut, position, idempotencyKey, clientTimestamp } = parsed.data;
 
-    const gameState = gameStates.get(gameId);
-    if (!gameState) {
-      throw new AppError('Game not initialized', 400);
-    }
+    const { response } = await withIdempotency(
+      idempotencyKey,
+      async () => {
+        const gameState = gameStates.get(gameId);
+        if (!gameState) {
+          throw new AppError('Game not initialized', 400);
+        }
 
-    // Record sub-out time
-    const playtimeTracker = playtimeTrackers.get(gameId);
-    if (playtimeTracker) {
-      playtimeTracker.subOut(playerOut, Date.now());
-      playtimeTracker.subIn(playerIn, Date.now());
-    }
+        // Record sub-out time. Use the client's timestamp when provided so
+        // offline-replayed subs don't shift playtime to the reconnect moment.
+        const ts = clientTimestamp || Date.now();
+        const playtimeTracker = playtimeTrackers.get(gameId);
+        if (playtimeTracker) {
+          playtimeTracker.subOut(playerOut, ts);
+          playtimeTracker.subIn(playerIn, ts);
+        }
 
-    // Execute substitution
-    const event = gameState.executeSubstitution(playerIn, playerOut, position || 'field_0');
+        // Execute substitution
+        const event = gameState.executeSubstitution(playerIn, playerOut, position || 'field_0');
 
-    if (event.error) {
-      throw new AppError(event.error, 400);
-    }
+        if (event.error) {
+          throw new AppError(event.error, 400);
+        }
+        if (clientTimestamp) event.clientTimestamp = clientTimestamp;
 
-    // Persist sub events and playtime to database
-    persistGameEvent(gameId, { ...event, type: 'PLAYER_SUBBED_IN', athleteId: playerIn });
-    persistGameEvent(gameId, { ...event, type: 'PLAYER_SUBBED_OUT', athleteId: playerOut });
-    saveGameStateSnapshot(gameId, req.coachId, gameState);
+        // Persist sub events and playtime to database
+        persistGameEvent(gameId, { ...event, type: 'PLAYER_SUBBED_IN',  athleteId: playerIn,  clientTimestamp }, { coachId: req.coachId });
+        persistGameEvent(gameId, { ...event, type: 'PLAYER_SUBBED_OUT', athleteId: playerOut, clientTimestamp }, { coachId: req.coachId });
+        saveGameStateSnapshot(gameId, req.coachId, gameState);
 
-    broadcastGameUpdate(gameId, 'substitution', { event, state: gameState.getState() });
-    logger.info(`Substitution: ${gameId}, In: ${playerIn}, Out: ${playerOut}`);
+        broadcastGameUpdate(gameId, 'substitution', { event, state: gameState.getState() });
+        logger.info(`Substitution: ${gameId}, In: ${playerIn}, Out: ${playerOut}`);
 
-    res.json({
-      success: true,
-      event,
-      state: gameState.getState(),
-    });
+        return { success: true, event, state: gameState.getState() };
+      },
+      { gameId, coachId: req.coachId, operation: 'sub' }
+    );
+
+    res.json(response);
   })
 );
 
@@ -409,31 +440,39 @@ router.post(
 router.post(
   '/:gameId/event',
   authenticateToken,
+  requireGameRole(['head_coach', 'assistant', 'stat_tracker']),
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
     const parsed = eventSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new AppError(`Invalid input: ${parsed.error.issues.map(i => i.message).join(', ')}`, 400);
     }
-    const { eventType, athleteId, metadata = {} } = parsed.data;
+    const { eventType, athleteId, metadata = {}, idempotencyKey, clientTimestamp } = parsed.data;
 
-    const gameState = gameStates.get(gameId);
-    if (!gameState) {
-      throw new AppError('Game not initialized', 400);
-    }
+    const { cached, response } = await withIdempotency(
+      idempotencyKey,
+      async () => {
+        const gameState = gameStates.get(gameId);
+        if (!gameState) {
+          throw new AppError('Game not initialized', 400);
+        }
 
-    const event = gameState.logEvent(eventType, athleteId, metadata);
+        const event = gameState.logEvent(eventType, athleteId, metadata);
+        if (clientTimestamp) event.clientTimestamp = clientTimestamp;
 
-    // Persist to database
-    persistGameEvent(gameId, event);
+        // Persist to DB and attach returned seq_no so clients tracking a
+        // cursor can advance it past this event.
+        const persisted = await persistGameEvent(gameId, event, { coachId: req.coachId });
+        if (persisted?.seq_no) event.seqNo = persisted.seq_no;
 
-    logger.debug(`Event logged: ${gameId}, ${eventType}, Player ${athleteId}`);
+        logger.debug(`Event logged: ${gameId}, ${eventType}, Player ${athleteId}`);
 
-    res.json({
-      success: true,
-      event,
-      state: gameState.getState(),
-    });
+        return { success: true, event, state: gameState.getState() };
+      },
+      { gameId, coachId: req.coachId, operation: 'event' }
+    );
+
+    res.json(response);
   })
 );
 
@@ -452,72 +491,83 @@ router.post(
 router.post(
   '/:gameId/opponent-event',
   authenticateToken,
+  requireGameRole(['head_coach', 'assistant', 'stat_tracker']),
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
     const parsed = opponentEventSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new AppError(`Invalid input: ${parsed.error.issues.map(i => i.message).join(', ')}`, 400);
     }
-    const { eventType, opposingPlayerId, metadata = {} } = parsed.data;
+    const { eventType, opposingPlayerId, metadata = {}, idempotencyKey, clientTimestamp } = parsed.data;
 
-    const gameState = gameStates.get(gameId);
-    if (!gameState) {
-      throw new AppError('Game not initialized', 400);
-    }
+    const { response } = await withIdempotency(
+      idempotencyKey,
+      async () => {
+        const gameState = gameStates.get(gameId);
+        if (!gameState) {
+          throw new AppError('Game not initialized', 400);
+        }
 
-    // If an opposingPlayerId was provided, confirm it belongs to this game's
-    // scouted opposing team. Anonymous team-side events bypass this check.
-    if (opposingPlayerId) {
-      const verify = await query(
-        `SELECT op.id
-           FROM opposing_players op
-           JOIN opposing_teams ot ON op.opposing_team_id = ot.id
-           JOIN games g           ON g.opposing_team_id = ot.id
-          WHERE op.id = $1 AND g.id = $2`,
-        [opposingPlayerId, gameId]
-      );
-      if (verify.rows.length === 0) {
-        throw new AppError('opposingPlayerId does not belong to this game\'s opposing team', 400);
-      }
-    }
+        // If an opposingPlayerId was provided, confirm it belongs to this game's
+        // scouted opposing team. Anonymous team-side events bypass this check.
+        if (opposingPlayerId) {
+          const verify = await query(
+            `SELECT op.id
+               FROM opposing_players op
+               JOIN opposing_teams ot ON op.opposing_team_id = ot.id
+               JOIN games g           ON g.opposing_team_id = ot.id
+              WHERE op.id = $1 AND g.id = $2`,
+            [opposingPlayerId, gameId]
+          );
+          if (verify.rows.length === 0) {
+            throw new AppError('opposingPlayerId does not belong to this game\'s opposing team', 400);
+          }
+        }
 
-    // Record in the in-memory event log so live sync shows it, but do not
-    // route through logEvent (which expects an athlete). Build the event
-    // payload directly so persistGameEvent and consumers see teamSide.
-    const DB_TO_INMEM = {
-      goal: 'GOAL', assist: 'ASSIST', shot: 'SHOT', shot_on_goal: 'SHOT_ON_GOAL',
-      ground_ball: 'GROUND_BALL', turnover: 'TURNOVER', caused_turnover: 'CAUSED_TURNOVER',
-      save: 'SAVE', penalty: 'PENALTY',
-      faceoff_win: 'FACEOFF_WIN', faceoff_loss: 'FACEOFF_LOSS',
-    };
-    const inMemType = DB_TO_INMEM[eventType];
+        // Record in the in-memory event log so live sync shows it, but do not
+        // route through logEvent (which expects an athlete). Build the event
+        // payload directly so persistGameEvent and consumers see teamSide.
+        const DB_TO_INMEM = {
+          goal: 'GOAL', assist: 'ASSIST', shot: 'SHOT', shot_on_goal: 'SHOT_ON_GOAL',
+          ground_ball: 'GROUND_BALL', turnover: 'TURNOVER', caused_turnover: 'CAUSED_TURNOVER',
+          save: 'SAVE', penalty: 'PENALTY',
+          faceoff_win: 'FACEOFF_WIN', faceoff_loss: 'FACEOFF_LOSS',
+        };
+        const inMemType = DB_TO_INMEM[eventType];
 
-    const event = {
-      type:              inMemType,
-      timestamp:         Date.now(),
-      athleteId:         null,
-      teamSide:          'away',
-      opposingPlayerId:  opposingPlayerId || null,
-      period:            gameState.period,
-      clockTime:         gameState.clockTime,
-      ...metadata,
-    };
-    gameState.events.push(event);
+        const event = {
+          type:              inMemType,
+          timestamp:         Date.now(),
+          athleteId:         null,
+          teamSide:          'away',
+          opposingPlayerId:  opposingPlayerId || null,
+          period:            gameState.period,
+          clockTime:         gameState.clockTime,
+          clientTimestamp:   clientTimestamp || null,
+          ...metadata,
+        };
+        gameState.events.push(event);
 
-    // Persist to DB — persistGameEvent maps teamSide→team_side and nulls athlete
-    persistGameEvent(gameId, event);
+        // Persist to DB — persistGameEvent maps teamSide→team_side and nulls athlete
+        const persisted = await persistGameEvent(gameId, event, { coachId: req.coachId });
+        if (persisted?.seq_no) event.seqNo = persisted.seq_no;
 
-    broadcastGameUpdate(gameId, 'game_event', event);
-    logger.debug(`Opponent event: ${gameId}, ${eventType}, opposingPlayer ${opposingPlayerId || 'team'}`);
+        broadcastGameUpdate(gameId, 'game_event', event);
+        logger.debug(`Opponent event: ${gameId}, ${eventType}, opposingPlayer ${opposingPlayerId || 'team'}`);
 
-    // Recompute and broadcast opponent threat scores so the sideline
-    // panel reflects the new event immediately. Fire-and-forget — a DB
-    // hiccup here shouldn't block the event response.
-    broadcastThreats(gameId).catch(err =>
-      logger.warn(`Threat broadcast failed for ${gameId}: ${err.message}`)
+        // Recompute and broadcast opponent threat scores so the sideline
+        // panel reflects the new event immediately. Fire-and-forget — a DB
+        // hiccup here shouldn't block the event response.
+        broadcastThreats(gameId).catch(err =>
+          logger.warn(`Threat broadcast failed for ${gameId}: ${err.message}`)
+        );
+
+        return { success: true, event, state: gameState.getState() };
+      },
+      { gameId, coachId: req.coachId, operation: 'opponent-event' }
     );
 
-    res.json({ success: true, event, state: gameState.getState() });
+    res.json(response);
   })
 );
 
@@ -574,71 +624,85 @@ router.get(
 router.delete(
   '/:gameId/event/last',
   authenticateToken,
+  requireGameRole(['head_coach', 'assistant', 'stat_tracker']),
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
+    // Undo is the single most dangerous op to replay — each call deletes the
+    // *current* most-recent event, so a retried undo wipes a different event
+    // than the user intended. DELETE has no body, so the key comes from a
+    // header or query string.
+    const idempotencyKey = req.get('x-idempotency-key') || req.query.idempotencyKey || null;
 
-    const gameState = gameStates.get(gameId);
-    if (!gameState) throw new AppError('Game not initialized', 400);
+    const { response } = await withIdempotency(
+      idempotencyKey,
+      async () => {
+        const gameState = gameStates.get(gameId);
+        if (!gameState) throw new AppError('Game not initialized', 400);
 
-    const removed = gameState.undoLastStatEvent();
-    if (!removed) {
-      return res.json({ success: true, removed: null, message: 'Nothing to undo.' });
-    }
-
-    // Map the in-memory event type to the DB event_type string
-    const TYPE_MAP = {
-      GOAL: 'goal', ASSIST: 'assist', SHOT: 'shot', SHOT_ON_GOAL: 'shot_on_goal',
-      GROUND_BALL: 'ground_ball', TURNOVER: 'turnover', CAUSED_TURNOVER: 'caused_turnover',
-      SAVE: 'save', PENALTY: 'penalty', FACEOFF_WIN: 'faceoff_win', FACEOFF_LOSS: 'faceoff_loss',
-    };
-    const dbType = TYPE_MAP[removed.type];
-
-    if (dbType) {
-      const teamSide = removed.teamSide === 'away' ? 'away' : 'home';
-      if (teamSide === 'home' && removed.athleteId) {
-        await query(
-          `DELETE FROM game_events WHERE id = (
-             SELECT id FROM game_events
-             WHERE game_id = $1 AND team_side = 'home'
-               AND athlete_id = $2 AND event_type = $3
-             ORDER BY created_at DESC
-             LIMIT 1
-           )`,
-          [gameId, removed.athleteId, dbType]
-        );
-      } else if (teamSide === 'away') {
-        // Match on opposing_player_id when present; else match any team-side
-        // opponent event of this type for the game.
-        if (removed.opposingPlayerId) {
-          await query(
-            `DELETE FROM game_events WHERE id = (
-               SELECT id FROM game_events
-               WHERE game_id = $1 AND team_side = 'away'
-                 AND opposing_player_id = $2 AND event_type = $3
-               ORDER BY created_at DESC
-               LIMIT 1
-             )`,
-            [gameId, removed.opposingPlayerId, dbType]
-          );
-        } else {
-          await query(
-            `DELETE FROM game_events WHERE id = (
-               SELECT id FROM game_events
-               WHERE game_id = $1 AND team_side = 'away'
-                 AND opposing_player_id IS NULL AND event_type = $3
-               ORDER BY created_at DESC
-               LIMIT 1
-             )`,
-            [gameId, null, dbType]
-          );
+        const removed = gameState.undoLastStatEvent();
+        if (!removed) {
+          return { success: true, removed: null, message: 'Nothing to undo.' };
         }
-      }
-    }
 
-    logger.info(`Undo last event: ${removed.type} (${removed.teamSide || 'home'}) in game ${gameId}`);
-    broadcastGameUpdate(gameId, 'state_update', { state: gameState.getState() });
+        // Map the in-memory event type to the DB event_type string
+        const TYPE_MAP = {
+          GOAL: 'goal', ASSIST: 'assist', SHOT: 'shot', SHOT_ON_GOAL: 'shot_on_goal',
+          GROUND_BALL: 'ground_ball', TURNOVER: 'turnover', CAUSED_TURNOVER: 'caused_turnover',
+          SAVE: 'save', PENALTY: 'penalty', FACEOFF_WIN: 'faceoff_win', FACEOFF_LOSS: 'faceoff_loss',
+        };
+        const dbType = TYPE_MAP[removed.type];
 
-    res.json({ success: true, removed, state: gameState.getState() });
+        if (dbType) {
+          const teamSide = removed.teamSide === 'away' ? 'away' : 'home';
+          if (teamSide === 'home' && removed.athleteId) {
+            await query(
+              `DELETE FROM game_events WHERE id = (
+                 SELECT id FROM game_events
+                 WHERE game_id = $1 AND team_side = 'home'
+                   AND athlete_id = $2 AND event_type = $3
+                 ORDER BY created_at DESC
+                 LIMIT 1
+               )`,
+              [gameId, removed.athleteId, dbType]
+            );
+          } else if (teamSide === 'away') {
+            // Match on opposing_player_id when present; else match any team-side
+            // opponent event of this type for the game.
+            if (removed.opposingPlayerId) {
+              await query(
+                `DELETE FROM game_events WHERE id = (
+                   SELECT id FROM game_events
+                   WHERE game_id = $1 AND team_side = 'away'
+                     AND opposing_player_id = $2 AND event_type = $3
+                   ORDER BY created_at DESC
+                   LIMIT 1
+                 )`,
+                [gameId, removed.opposingPlayerId, dbType]
+              );
+            } else {
+              await query(
+                `DELETE FROM game_events WHERE id = (
+                   SELECT id FROM game_events
+                   WHERE game_id = $1 AND team_side = 'away'
+                     AND opposing_player_id IS NULL AND event_type = $3
+                   ORDER BY created_at DESC
+                   LIMIT 1
+                 )`,
+                [gameId, null, dbType]
+              );
+            }
+          }
+        }
+
+        logger.info(`Undo last event: ${removed.type} (${removed.teamSide || 'home'}) in game ${gameId}`);
+        broadcastGameUpdate(gameId, 'state_update', { state: gameState.getState() });
+
+        return { success: true, removed, state: gameState.getState() };
+      },
+      { gameId, coachId: req.coachId, operation: 'undo' }
+    );
+
+    res.json(response);
   })
 );
 
@@ -650,38 +714,43 @@ router.delete(
 router.post(
   '/:gameId/score',
   authenticateToken,
+  requireGameRole(['head_coach', 'assistant', 'stat_tracker']),
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
     const parsed = scoreSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new AppError(`Invalid input: ${parsed.error.issues.map(i => i.message).join(', ')}`, 400);
     }
-    const { team, points } = parsed.data;
+    const { team, points, idempotencyKey } = parsed.data;
 
-    const gameState = gameStates.get(gameId);
-    if (!gameState) {
-      throw new AppError('Game not initialized', 400);
-    }
+    const { response } = await withIdempotency(
+      idempotencyKey,
+      async () => {
+        const gameState = gameStates.get(gameId);
+        if (!gameState) {
+          throw new AppError('Game not initialized', 400);
+        }
 
-    const event = gameState.updateScore(team, points);
-    if (event.error) {
-      throw new AppError(event.error, 400);
-    }
+        const event = gameState.updateScore(team, points);
+        if (event.error) {
+          throw new AppError(event.error, 400);
+        }
 
-    // Persist score to games table immediately
-    await query(
-      `UPDATE games SET score_home = $1, score_away = $2 WHERE id = $3`,
-      [gameState.homeScore, gameState.awayScore, gameId]
+        // Persist score to games table immediately
+        await query(
+          `UPDATE games SET score_home = $1, score_away = $2 WHERE id = $3`,
+          [gameState.homeScore, gameState.awayScore, gameId]
+        );
+
+        broadcastGameUpdate(gameId, 'score_update', { event, state: gameState.getState() });
+        logger.info(`Score updated: ${gameId}, ${team} = ${points}`);
+
+        return { success: true, event, state: gameState.getState() };
+      },
+      { gameId, coachId: req.coachId, operation: 'score' }
     );
 
-    broadcastGameUpdate(gameId, 'score_update', { event, state: gameState.getState() });
-    logger.info(`Score updated: ${gameId}, ${team} = ${points}`);
-
-    res.json({
-      success: true,
-      event,
-      state: gameState.getState(),
-    });
+    res.json(response);
   })
 );
 
@@ -749,6 +818,7 @@ router.get(
 router.post(
   '/:gameId/end',
   authenticateToken,
+  requireGameRole(['head_coach']),
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
     const gameState = await ensureGameState(gameId);
@@ -849,81 +919,90 @@ router.post(
 router.post(
   '/:gameId/sub-queue/add',
   authenticateToken,
+  requireGameRole(['head_coach', 'assistant']),
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
-    const { type } = req.body;
+    const { type, idempotencyKey } = req.body;
 
-    const gameState = gameStates.get(gameId);
-    if (!gameState) throw new AppError('Game not initialized', 400);
+    const { response } = await withIdempotency(
+      idempotencyKey,
+      async () => {
+        const gameState = gameStates.get(gameId);
+        if (!gameState) throw new AppError('Game not initialized', 400);
 
-    const playtimeTracker = playtimeTrackers.get(gameId);
-    let entry;
+        const playtimeTracker = playtimeTrackers.get(gameId);
+        let entry;
 
-    if (type === 'individual') {
-      const { playerIn, playerOut, position } = req.body;
-      if (!playerIn || !playerOut || !position) {
-        throw new AppError('individual type requires playerIn, playerOut, position', 400);
-      }
-      const athlete = gameState.athletes.find(a => a.id === playerIn);
-      entry = {
-        queueId:        crypto.randomUUID(),
-        type:           'individual',
-        label:          athlete ? `${athlete.first_name} ${athlete.last_name}` : 'Sub',
-        source:         'manual',
-        situationType:  null,
-        stayingPlayers: [],
-        moves: [{
-          moveId:    crypto.randomUUID(),
-          playerIn,
-          playerOut,
-          position,
-        }],
-      };
+        if (type === 'individual') {
+          const { playerIn, playerOut, position } = req.body;
+          if (!playerIn || !playerOut || !position) {
+            throw new AppError('individual type requires playerIn, playerOut, position', 400);
+          }
+          const athlete = gameState.athletes.find(a => a.id === playerIn);
+          entry = {
+            queueId:        crypto.randomUUID(),
+            type:           'individual',
+            label:          athlete ? `${athlete.first_name} ${athlete.last_name}` : 'Sub',
+            source:         'manual',
+            situationType:  null,
+            stayingPlayers: [],
+            moves: [{
+              moveId:    crypto.randomUUID(),
+              playerIn,
+              playerOut,
+              position,
+            }],
+          };
 
-    } else if (type === 'line') {
-      const { lineId } = req.body;
-      if (!lineId) throw new AppError('line type requires lineId', 400);
+        } else if (type === 'line') {
+          const { lineId } = req.body;
+          if (!lineId) throw new AppError('line type requires lineId', 400);
 
-      const lineResult = await query('SELECT * FROM lines WHERE id = $1', [lineId]);
-      if (lineResult.rows.length === 0) throw new AppError('Line not found', 404);
+          const lineResult = await query('SELECT * FROM lines WHERE id = $1', [lineId]);
+          if (lineResult.rows.length === 0) throw new AppError('Line not found', 404);
 
-      entry = gameState.resolveLineSwap(lineResult.rows[0]);
+          entry = gameState.resolveLineSwap(lineResult.rows[0]);
 
-    } else if (type === 'situation') {
-      const { situationType } = req.body;
-      if (!situationType) throw new AppError('situation type requires situationType', 400);
+        } else if (type === 'situation') {
+          const { situationType } = req.body;
+          if (!situationType) throw new AppError('situation type requires situationType', 400);
 
-      // Load per-game assignment for this situation
-      const assignmentResult = await query(
-        'SELECT player_ids FROM game_situation_assignments WHERE game_id = $1 AND situation_type = $2',
-        [gameId, situationType]
-      );
-      const assignedIds = assignmentResult.rows[0]?.player_ids || null;
+          // Load per-game assignment for this situation
+          const assignmentResult = await query(
+            'SELECT player_ids FROM game_situation_assignments WHERE game_id = $1 AND situation_type = $2',
+            [gameId, situationType]
+          );
+          const assignedIds = assignmentResult.rows[0]?.player_ids || null;
 
-      // Fetch full athlete list for scoring (situationResolver needs skill fields)
-      const gameRecord = await query('SELECT team_id FROM games WHERE id = $1', [gameId]);
-      const athletesResult = await query(
-        'SELECT * FROM athletes WHERE team_id = $1 AND status = $2',
-        [gameRecord.rows[0].team_id, 'active']
-      );
+          // Fetch full athlete list for scoring (situationResolver needs skill fields)
+          const gameRecord = await query('SELECT team_id FROM games WHERE id = $1', [gameId]);
+          const athletesResult = await query(
+            'SELECT * FROM athletes WHERE team_id = $1 AND status = $2',
+            [gameRecord.rows[0].team_id, 'active']
+          );
 
-      entry = resolveSituation(
-        gameState,
-        situationType,
-        assignedIds,
-        athletesResult.rows,
-        playtimeTracker
-      );
+          entry = resolveSituation(
+            gameState,
+            situationType,
+            assignedIds,
+            athletesResult.rows,
+            playtimeTracker
+          );
 
-    } else {
-      throw new AppError('type must be individual, line, or situation', 400);
-    }
+        } else {
+          throw new AppError('type must be individual, line, or situation', 400);
+        }
 
-    const { entry: added, mergeAlerts } = gameState.addToQueue(entry);
-    await saveGameStateSnapshot(gameId, req.coachId, gameState);
-    broadcastGameUpdate(gameId, 'queue_update', { subQueue: gameState.subQueue, mergeAlerts });
+        const { entry: added, mergeAlerts } = gameState.addToQueue(entry);
+        await saveGameStateSnapshot(gameId, req.coachId, gameState);
+        broadcastGameUpdate(gameId, 'queue_update', { subQueue: gameState.subQueue, mergeAlerts });
 
-    res.json({ success: true, entry: added, subQueue: gameState.subQueue, mergeAlerts });
+        return { success: true, entry: added, subQueue: gameState.subQueue, mergeAlerts };
+      },
+      { gameId, coachId: req.coachId, operation: 'queue-add' }
+    );
+
+    res.json(response);
   })
 );
 
@@ -934,6 +1013,7 @@ router.post(
 router.delete(
   '/:gameId/sub-queue/:queueId',
   authenticateToken,
+  requireGameRole(['head_coach', 'assistant']),
   asyncHandler(async (req, res) => {
     const { gameId, queueId } = req.params;
     const gameState = gameStates.get(gameId);
@@ -954,6 +1034,7 @@ router.delete(
 router.delete(
   '/:gameId/sub-queue/:queueId/moves/:moveId',
   authenticateToken,
+  requireGameRole(['head_coach', 'assistant']),
   asyncHandler(async (req, res) => {
     const { gameId, queueId, moveId } = req.params;
     const gameState = gameStates.get(gameId);
@@ -974,58 +1055,124 @@ router.delete(
 router.post(
   '/:gameId/batch-sub',
   authenticateToken,
+  requireGameRole(['head_coach', 'assistant']),
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
-    const gameState = gameStates.get(gameId);
-    if (!gameState) throw new AppError('Game not initialized', 400);
+    const { idempotencyKey, clientTimestamp } = req.body || {};
 
-    const result = gameState.executeBatchSub();
-    if (!result.success) {
-      return res.status(400).json({ success: false, errors: result.errors });
+    const { response } = await withIdempotency(
+      idempotencyKey,
+      async () => {
+        const gameState = gameStates.get(gameId);
+        if (!gameState) throw new AppError('Game not initialized', 400);
+
+        const result = gameState.executeBatchSub();
+        if (!result.success) {
+          // Validation failures aren't cached — the client can retry after
+          // fixing the queue. Signal back via an `errors` array the caller
+          // recognizes as the failure path.
+          return { success: false, errors: result.errors };
+        }
+
+        const playtimeTracker = playtimeTrackers.get(gameId);
+        const ts = clientTimestamp || Date.now();
+
+        // Record playtime for each move
+        if (playtimeTracker) {
+          for (const move of result.executedMoves) {
+            playtimeTracker.subOut(move.playerOut, ts);
+            playtimeTracker.subIn(move.playerIn, ts);
+          }
+        }
+
+        // Persist individual sub events for each move
+        for (const move of result.executedMoves) {
+          persistGameEvent(gameId, {
+            type:            'PLAYER_SUBBED_IN',
+            athleteId:       move.playerIn,
+            timestamp:       move.timestamp,
+            period:          gameState.period,
+            clockTime:       gameState.clockTime,
+            clientTimestamp,
+          }, { coachId: req.coachId });
+          persistGameEvent(gameId, {
+            type:            'PLAYER_SUBBED_OUT',
+            athleteId:       move.playerOut,
+            timestamp:       move.timestamp,
+            period:          gameState.period,
+            clockTime:       gameState.clockTime,
+            clientTimestamp,
+          }, { coachId: req.coachId });
+        }
+
+        await saveGameStateSnapshot(gameId, req.coachId, gameState);
+
+        broadcastGameUpdate(gameId, 'batch_substitution', {
+          event: result.event,
+          state: gameState.getState(),
+        });
+
+        logger.info(`Batch sub activated: ${gameId}, ${result.executedMoves.length} moves`);
+
+        return { success: true, event: result.event, state: gameState.getState() };
+      },
+      { gameId, coachId: req.coachId, operation: 'batch-sub' }
+    );
+
+    // A false success (validation failure) still returns 200 with errors —
+    // matches the pre-idempotency shape where the 400 short-circuit logic
+    // was inline. Callers already check `success` to branch.
+    if (response.success === false) {
+      return res.status(400).json(response);
+    }
+    res.json(response);
+  })
+);
+
+// ─── Replay reconcile endpoint ───────────────────────────────────────────────
+
+/**
+ * GET /:gameId/events-since/:seqNo
+ * Return every game_events row for this game with seq_no > :seqNo, ordered
+ * oldest→newest. The client tracks the highest seq_no it has seen and calls
+ * this on reconnect to pull anything it missed while offline.
+ *
+ * The response also includes the current snapshot so the client can hard-sync
+ * if it's been offline long enough that its state has drifted.
+ */
+router.get(
+  '/:gameId/events-since/:seqNo',
+  authenticateToken,
+  asyncHandler(async (req, res) => {
+    const { gameId, seqNo } = req.params;
+    const since = parseInt(seqNo, 10);
+    if (!Number.isFinite(since) || since < 0) {
+      throw new AppError('seqNo must be a non-negative integer', 400);
     }
 
-    const playtimeTracker = playtimeTrackers.get(gameId);
-    const now = Date.now();
+    const eventsRes = await query(
+      `SELECT id, seq_no, event_type, period, game_clock_seconds,
+              team_side, athlete_id, opposing_player_id,
+              client_timestamp, created_at, coach_id
+         FROM game_events
+        WHERE game_id = $1 AND seq_no > $2
+        ORDER BY seq_no ASC`,
+      [gameId, since]
+    );
 
-    // Record playtime for each move
-    if (playtimeTracker) {
-      for (const move of result.executedMoves) {
-        playtimeTracker.subOut(move.playerOut, now);
-        playtimeTracker.subIn(move.playerIn, now);
-      }
-    }
+    // Include the snapshot so a long-disconnected client can resync state in
+    // one round-trip rather than re-deriving from events.
+    const snapshot = await loadGameStateSnapshot(gameId);
 
-    // Persist individual sub events for each move
-    for (const move of result.executedMoves) {
-      persistGameEvent(gameId, {
-        type:      'PLAYER_SUBBED_IN',
-        athleteId: move.playerIn,
-        timestamp: move.timestamp,
-        period:    gameState.period,
-        clockTime: gameState.clockTime,
-      });
-      persistGameEvent(gameId, {
-        type:      'PLAYER_SUBBED_OUT',
-        athleteId: move.playerOut,
-        timestamp: move.timestamp,
-        period:    gameState.period,
-        clockTime: gameState.clockTime,
-      });
-    }
-
-    await saveGameStateSnapshot(gameId, req.coachId, gameState);
-
-    broadcastGameUpdate(gameId, 'batch_substitution', {
-      event: result.event,
-      state: gameState.getState(),
-    });
-
-    logger.info(`Batch sub activated: ${gameId}, ${result.executedMoves.length} moves`);
+    const latest = eventsRes.rows.length
+      ? eventsRes.rows[eventsRes.rows.length - 1].seq_no
+      : since;
 
     res.json({
       success: true,
-      event:   result.event,
-      state:   gameState.getState(),
+      events: eventsRes.rows,
+      latestSeqNo: latest,
+      snapshot,
     });
   })
 );

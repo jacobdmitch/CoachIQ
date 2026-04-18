@@ -135,8 +135,8 @@ router.patch('/:id', authenticateToken, asyncHandler(async (req, res) => {
   const game = gameResult.rows[0];
   await requireTeamAccess(req.coachId, game.team_id);
 
-  const allowed = ['opponent', 'game_date', 'start_time', 'location', 'format', 'score_home', 'score_away', 'status', 'notes'];
-  const keyMap  = { gameDate: 'game_date', startTime: 'start_time', scoreHome: 'score_home', scoreAway: 'score_away' };
+  const allowed = ['opponent', 'game_date', 'start_time', 'location', 'format', 'score_home', 'score_away', 'status', 'notes', 'opposing_team_id'];
+  const keyMap  = { gameDate: 'game_date', startTime: 'start_time', scoreHome: 'score_home', scoreAway: 'score_away', opposingTeamId: 'opposing_team_id' };
 
   const fields = [];
   const values = [];

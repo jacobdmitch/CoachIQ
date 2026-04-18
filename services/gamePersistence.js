@@ -23,9 +23,9 @@ const EVENT_TYPE_MAP = {
   FACEOFF_LOSS: 'faceoff_loss',
 };
 
-export async function persistGameEvent(gameId, event) {
+export async function persistGameEvent(gameId, event, { coachId = null } = {}) {
   const dbType = EVENT_TYPE_MAP[event.type];
-  if (!dbType) return; // Clock events, score updates, etc. don't go in game_events
+  if (!dbType) return null; // Clock events, score updates, etc. don't go in game_events
 
   const teamSide = event.teamSide === 'away' ? 'away' : 'home';
   const athleteId = teamSide === 'home'
@@ -35,14 +35,21 @@ export async function persistGameEvent(gameId, event) {
 
   // Home events must have an athlete; away events may be anonymous (team-level),
   // so a missing opposingPlayerId is still persisted as a team-side stat.
-  if (teamSide === 'home' && !athleteId) return;
+  if (teamSide === 'home' && !athleteId) return null;
+
+  // client_timestamp is the ms epoch the client fired the event. It's passed
+  // on the event object when the mutation came through an idempotency-aware
+  // endpoint; absent otherwise. Stored so offline-queued events preserve
+  // their original ordering even when they land late.
+  const clientTimestamp = event.clientTimestamp ? new Date(event.clientTimestamp) : null;
 
   try {
-    await query(
+    const result = await query(
       `INSERT INTO game_events
          (game_id, athlete_id, event_type, period, game_clock_seconds, notes,
-          team_side, opposing_player_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          team_side, opposing_player_id, client_timestamp, coach_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING id, seq_no`,
       [
         gameId,
         athleteId,
@@ -52,11 +59,15 @@ export async function persistGameEvent(gameId, event) {
         event.reason || null,
         teamSide,
         opposingPlayerId,
+        clientTimestamp,
+        coachId,
       ]
     );
+    return result.rows[0] || null;
   } catch (err) {
     // Don't let persistence failures break the live game flow
     logger.error(`Failed to persist game event: ${err.message}`, { gameId, event });
+    return null;
   }
 }
 

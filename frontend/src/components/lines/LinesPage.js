@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useLines } from '../../hooks/useLines';
 import Badge from '../common/Badge';
 import Button from '../common/Button';
+import RotationManager from './RotationManager';
 
 const POS_VARIANT = { Attack: 'red', Midfield: 'gold', Defense: 'blue', Goalie: 'green', FOGO: 'amber' };
 
@@ -234,6 +235,13 @@ export default function LinesPage() {
           )}
         </>
       ) : null}
+
+      {/* Rotation templates */}
+      {team?.id && (
+        <div style={{ marginBottom: 'var(--sp-6)' }}>
+          <RotationManager teamId={team.id} lines={lines} />
+        </div>
+      )}
 
       {/* Saved lines list */}
       {lines.length > 0 && (

@@ -256,6 +256,7 @@ export default function StagingPanel({
   liveState,
   athletes,
   lines,
+  rotations = [],
   mergeAlerts,
   onAddToQueue,
   onRemoveEntry,
@@ -267,6 +268,20 @@ export default function StagingPanel({
   const [mode,              setMode]              = useState(null); // 'individual' | 'line' | 'situation'
   const [alertsDismissed,   setAlertsDismissed]   = useState(false);
   const [generatingLines,   setGeneratingLines]   = useState(false);
+
+  // Per-rotation "next up" pointer. Lives only for the mounted panel — when
+  // the game ends and the coach leaves Game Mode, the cursors reset, which
+  // matches coach mental model ("next game starts from the top of the rotation").
+  const [rotationCursors, setRotationCursors] = useState({}); // rotationId -> next index
+
+  function handleRotationTap(rotation) {
+    const current = rotationCursors[rotation.id] ?? 0;
+    const lineId  = rotation.line_ids[current];
+    if (!lineId) return;
+    onAddToQueue({ type: 'line', lineId });
+    const nextIdx = (current + 1) % rotation.line_ids.length;
+    setRotationCursors(prev => ({ ...prev, [rotation.id]: nextIdx }));
+  }
 
   const subQueue = liveState?.subQueue || [];
   const totalMoves = subQueue.reduce((n, e) => n + e.moves.length, 0);
@@ -308,6 +323,64 @@ export default function StagingPanel({
               ×
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Rotation "Next Up" — one-tap queue from a pre-built rotation */}
+      {rotations.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
+          <p className="section-heading" style={{ margin: 0 }}>Next Up</p>
+          {rotations.map(r => {
+            const cursor  = rotationCursors[r.id] ?? 0;
+            const nextId  = r.line_ids[cursor];
+            const nextLine = lines.find(l => l.id === nextId);
+            const afterId = r.line_ids[(cursor + 1) % r.line_ids.length];
+            const afterLine = lines.find(l => l.id === afterId);
+            return (
+              <button
+                key={r.id}
+                onClick={() => handleRotationTap(r)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 'var(--sp-3)',
+                  padding: 'var(--sp-3) var(--sp-4)',
+                  background: 'var(--color-surface-1)',
+                  border: '1px solid var(--color-surface-2)',
+                  borderRadius: 'var(--radius-md)',
+                  cursor: 'pointer', textAlign: 'left',
+                  minHeight: 56,
+                }}
+                title={`Queue ${nextLine?.name || 'next line'} and advance rotation`}
+              >
+                <span style={{
+                  fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)',
+                  letterSpacing: '1.5px', textTransform: 'uppercase',
+                  color: 'var(--color-gold)', minWidth: 60,
+                }}>
+                  {r.position_group}
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{
+                    fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-sm)',
+                    color: 'var(--color-text-primary)', margin: 0,
+                  }}>
+                    {r.name} · {nextLine?.name || '?'}
+                  </p>
+                  <p style={{
+                    fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 10,
+                    color: 'var(--color-text-muted)', margin: '2px 0 0',
+                  }}>
+                    After: {afterLine?.name || '?'} ({cursor + 1}/{r.line_ids.length})
+                  </p>
+                </div>
+                <span style={{
+                  fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)',
+                  color: 'var(--color-gold)',
+                }}>
+                  Queue →
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
 

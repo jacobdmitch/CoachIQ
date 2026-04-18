@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import useLongPress from '../../hooks/useLongPress';
 
 /**
  * PlaytimePanel — live per-player minutes panel backed by the playtime_tick
@@ -8,8 +9,15 @@ import React, { useMemo, useState } from 'react';
  *
  * Collapsed by default so it doesn't crowd the Game Mode sideline view; tap
  * the header to expand.
+ *
+ * Long-press (tablet speed-path): when `onLongPressPlayer` is provided, each
+ * row opens an action menu on long-press so the coach can log a stat or
+ * trigger a sub without drilling through the Stats / Staging modals.
  */
-export default function PlaytimePanel({ athletes = [], playtime = [], equityFlags = [] }) {
+export default function PlaytimePanel({
+  athletes = [], playtime = [], equityFlags = [],
+  onLongPressPlayer,
+}) {
   const [open, setOpen] = useState(false);
 
   const flagsById = useMemo(() => {
@@ -80,7 +88,12 @@ export default function PlaytimePanel({ athletes = [], playtime = [], equityFlag
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
               {rows.map(row => (
-                <PlaytimeRow key={row.athleteId} row={row} flag={flagsById.get(String(row.athleteId))} />
+                <PlaytimeRow
+                  key={row.athleteId}
+                  row={row}
+                  flag={flagsById.get(String(row.athleteId))}
+                  onLongPress={onLongPressPlayer}
+                />
               ))}
             </div>
           )}
@@ -90,8 +103,15 @@ export default function PlaytimePanel({ athletes = [], playtime = [], equityFlag
   );
 }
 
-function PlaytimeRow({ row, flag }) {
+function PlaytimeRow({ row, flag, onLongPress }) {
   const { athlete, totalSeconds, targetSeconds, isOnField } = row;
+
+  // Long-press opens the action menu at the press anchor. A short tap is a
+  // no-op — the row isn't interactive on tap today, only on hold.
+  const longPressHandlers = useLongPress(
+    ({ anchor }) => onLongPress?.({ athlete, isOnField, anchor }),
+    {}
+  );
   const pct = Math.max(0, Math.min(100, (totalSeconds / Math.max(1, targetSeconds)) * 100));
   const mins = Math.floor(totalSeconds / 60);
   const secs = totalSeconds % 60;
@@ -106,7 +126,16 @@ function PlaytimeRow({ row, flag }) {
   const name = `#${athlete.jersey_number ?? ''} ${athlete.last_name}`.trim();
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
+    <div
+      {...(onLongPress ? longPressHandlers : {})}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 'var(--sp-3)',
+        cursor: onLongPress ? 'pointer' : 'default',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        touchAction: 'manipulation',
+      }}
+    >
       {/* Name + on-field dot */}
       <div style={{ flex: '0 0 120px', display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{
