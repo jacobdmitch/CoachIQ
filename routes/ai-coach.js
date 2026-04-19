@@ -8,6 +8,7 @@ import { getLineCoachRecommendation, getPositionRecommendation } from '../servic
 import { getPositionRecommendations } from '../services/positionEngine.js';
 import { logAICall, getGameAIStats, getGameCallHistory } from '../services/aiCallLogger.js';
 import { gameStates, playtimeTrackers } from '../services/liveGameStore.js';
+import proactiveCoach from '../services/ai/proactiveCoach.js';
 
 const router = express.Router();
 
@@ -90,12 +91,15 @@ router.post(
     // Call Line Coach AI. playtimeTracker is forwarded so the agentic loop
     // can execute tools like analyze_playtime against live tracker state.
     // coachId enables per-tool audit logging in ai_invocation_log.
+    // teamId is forwarded so the RAG assembler can pull LINEUP_WRITE context
+    // when Claude emits a write-tier tool.
     const recommendation = await getLineCoachRecommendation(gameState, playtimeData, {
       format: game.format,
       seasonStats,
       focusArea,
       playtimeTracker,
       coachId: req.coachId,
+      teamId: game.team_id,
     });
 
     const latencyMs = Date.now() - startTime;
@@ -266,6 +270,44 @@ router.get(
         },
       ],
     });
+  })
+);
+
+/**
+ * POST /proactive/:pushId/ack
+ * Acknowledge a proactive recommendation that was pushed to the coach.
+ * Idempotent: returns 404 if the push is unknown, already acknowledged,
+ * or already dismissed.
+ */
+router.post(
+  '/proactive/:pushId/ack',
+  authenticateToken,
+  asyncHandler(async (req, res) => {
+    const { pushId } = req.params;
+    const row = await proactiveCoach.acknowledge(pushId);
+    if (!row) {
+      throw new AppError('Push not found or already resolved', 404);
+    }
+    res.json({ success: true, push: row });
+  })
+);
+
+/**
+ * POST /proactive/:pushId/dismiss
+ * Dismiss a proactive recommendation. In addition to marking the row,
+ * the scheduler extends the per-type cooldown so the same suggestion
+ * doesn't immediately re-push.
+ */
+router.post(
+  '/proactive/:pushId/dismiss',
+  authenticateToken,
+  asyncHandler(async (req, res) => {
+    const { pushId } = req.params;
+    const row = await proactiveCoach.dismiss(pushId);
+    if (!row) {
+      throw new AppError('Push not found or already resolved', 404);
+    }
+    res.json({ success: true, push: row });
   })
 );
 

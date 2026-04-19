@@ -14,6 +14,7 @@ import { computeOpposingThreats } from '../services/opponentScoutingService.js';
 import { sendPostGameSummaries } from '../services/emailService.js';
 import { withIdempotency } from '../services/idempotencyStore.js';
 import { requireGameRole, ensureHeadCoachParticipant } from '../middleware/gameRole.js';
+import proactiveCoach from '../services/ai/proactiveCoach.js';
 
 // Shared idempotency fields for mutation endpoints. Clients generate a v4
 // UUID for each logical action; server replays short-circuit to the cached
@@ -233,6 +234,16 @@ router.post(
     // creates the game_sessions row; ensureHeadCoachParticipant adds the
     // session_participants row so role enforcement downstream recognizes them.
     await ensureHeadCoachParticipant(gameId, req.coachId);
+
+    // Kick off the proactive Line Coach scheduler for this game. Pairs with
+    // the deregister() call in POST /:gameId/end. Not wired on rehydrate:
+    // after a dyno restart proactive pushes pause until the next game start.
+    proactiveCoach.register(gameId, {
+      coachId: req.coachId,
+      teamId:  game.team_id,
+      format:  game.format,
+    });
+
     broadcastGameUpdate(gameId, 'state_update', { state: gameState.getState() });
 
     logger.info(`Game started: ${gameId}`, { format: game.format, hasStartingLineup: !!startingLineup });
@@ -332,6 +343,7 @@ router.post(
       playtimeTracker.endPeriod();
     }
 
+    proactiveCoach.onEvent(gameId, 'period_end');
     logger.info(`Period ended: ${gameId}, Period ${gameState.period}`);
 
     res.json({
@@ -363,6 +375,7 @@ router.post(
       throw new AppError('Cannot start next period - not in break state', 400);
     }
 
+    proactiveCoach.onEvent(gameId, 'period_start');
     logger.info(`Period started: ${gameId}, Period ${gameState.period}`);
 
     res.json({
@@ -421,6 +434,7 @@ router.post(
         saveGameStateSnapshot(gameId, req.coachId, gameState);
 
         broadcastGameUpdate(gameId, 'substitution', { event, state: gameState.getState() });
+        proactiveCoach.onEvent(gameId, 'substitution');
         logger.info(`Substitution: ${gameId}, In: ${playerIn}, Out: ${playerOut}`);
 
         return { success: true, event, state: gameState.getState() };
@@ -743,6 +757,7 @@ router.post(
         );
 
         broadcastGameUpdate(gameId, 'score_update', { event, state: gameState.getState() });
+        proactiveCoach.onEvent(gameId, 'score');
         logger.info(`Score updated: ${gameId}, ${team} = ${points}`);
 
         return { success: true, event, state: gameState.getState() };
@@ -856,6 +871,7 @@ router.post(
     stopClockInterval(gameId);
     gameStates.delete(gameId);
     playtimeTrackers.delete(gameId);
+    proactiveCoach.deregister(gameId);
 
     // Fire post-game stat-summary emails for opted-in athletes. This block
     // is duplicated from PATCH /games/:id (transition-to-completed path);
