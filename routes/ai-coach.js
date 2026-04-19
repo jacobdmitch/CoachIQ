@@ -87,11 +87,15 @@ router.post(
       };
     });
 
-    // Call Line Coach AI
+    // Call Line Coach AI. playtimeTracker is forwarded so the agentic loop
+    // can execute tools like analyze_playtime against live tracker state.
+    // coachId enables per-tool audit logging in ai_invocation_log.
     const recommendation = await getLineCoachRecommendation(gameState, playtimeData, {
       format: game.format,
       seasonStats,
       focusArea,
+      playtimeTracker,
+      coachId: req.coachId,
     });
 
     const latencyMs = Date.now() - startTime;
@@ -99,7 +103,7 @@ router.post(
     // Log API call with actual token counts from response
     await logAICall({
       coachId: req.coachId,
-      model: 'claude-haiku-4-5-20251001',
+      model: recommendation.model || 'claude-haiku-4-5-20251001',
       inputTokens: recommendation.usage?.input_tokens || 0,
       outputTokens: recommendation.usage?.output_tokens || 0,
       latencyMs,

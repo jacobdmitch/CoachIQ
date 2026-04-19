@@ -1,13 +1,24 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { buildGameContext, buildPositionContext, getSystemPrompt } from './contextBuilder.js';
+import {
+  buildGameContext,
+  buildPositionContext,
+  getStaticSystemPrompt,
+  getDynamicSystemPrompt,
+} from './contextBuilder.js';
 import { COACHING_TOOLS } from './agents/toolDefinitions.js';
+import { routeToolCall, getAgentForTool } from './agents/orchestrator.js';
+import { logInvocation } from './aiCallLogger.js';
+import { selectModel } from './ai/modelSelector.js';
 import logger from './logger.js';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
+// Fallback model for position-recommendation calls that haven't been moved
+// onto the selector yet. Any new call site should use selectModel().
 const MODEL = 'claude-haiku-4-5-20251001';
+const DEFAULT_MAX_TOOL_ITERATIONS = 5;
 
 /**
  * Get Line Coach recommendations for current game state
@@ -20,70 +31,190 @@ const MODEL = 'claude-haiku-4-5-20251001';
  */
 export async function getLineCoachRecommendation(gameState, playtimeData, options = {}) {
   try {
-    const { format = 'standard', seasonStats = {}, focusArea = null } = options;
+    const {
+      format = 'standard',
+      seasonStats = {},
+      focusArea = null,
+      playtimeTracker = null,
+      maxToolIterations = DEFAULT_MAX_TOOL_ITERATIONS,
+      coachId = null,
+    } = options;
 
     // Build context for Claude
     const gameContext = buildGameContext(gameState, playtimeData, seasonStats);
-    const systemPrompt = getSystemPrompt(format);
+    const staticSystem = getStaticSystemPrompt(format);
+    const dynamicSystem = getDynamicSystemPrompt({ focusArea });
 
-    // Build user message
-    let userMessage = gameContext;
-    if (focusArea) {
-      userMessage += `\nFOCUS: Coach is asking about ${focusArea}\n`;
-    }
-    userMessage += '\nProvide coaching recommendations for this game state.';
+    // Build user message. Note: focusArea is handled via the dynamic system
+    // block above, so no longer duplicated in the user message.
+    const userMessage =
+      gameContext + '\nProvide coaching recommendations for this game state.';
 
     logger.info('Calling Claude for Line Coach recommendations', {
       gameId: gameState.gameId,
       format,
     });
 
-    // Call Claude with tools
-    const response = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 1024,
-      system: systemPrompt,
-      tools: COACHING_TOOLS,
-      messages: [
-        {
-          role: 'user',
-          content: userMessage,
-        },
-      ],
+    // The system prompt is sent as two blocks. The static block is stable
+    // across calls for a given format and is marked cache_control: ephemeral
+    // so the Anthropic cache serves it on subsequent calls within a game.
+    const systemBlocks = [
+      {
+        type: 'text',
+        text: staticSystem,
+        cache_control: { type: 'ephemeral' },
+      },
+    ];
+    if (dynamicSystem) {
+      systemBlocks.push({ type: 'text', text: dynamicSystem });
+    }
+
+    // Conversation state for the agentic loop. Each iteration either:
+    //   (a) produces a tool_use response -> we execute tools, append
+    //       tool_result, and loop for Claude to refine its analysis, or
+    //   (b) produces end_turn -> we stop and return.
+    const messages = [{ role: 'user', content: userMessage }];
+
+    // Pick model + token budget per intent signals. Default path stays on
+    // Haiku/1024 so behavior is unchanged for current callers; deliberative
+    // focusAreas escalate to Sonnet automatically.
+    const { model: selectedModel, maxTokens, tier } = selectModel({
+      focusArea,
     });
 
-    // Process response
     const recommendation = {
       gameId: gameState.gameId,
       timestamp: Date.now(),
       toolCalls: [],
+      toolResults: [],
       textAnalysis: '',
       suggestions: [],
-      usage: response.usage || null,
+      usage: {
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+      },
+      iterations: 0,
+      stopReason: null,
+      model: selectedModel,
+      modelTier: tier,
     };
 
-    // Extract text and tool calls from response
-    for (const block of response.content) {
-      if (block.type === 'text') {
-        recommendation.textAnalysis = block.text;
-      } else if (block.type === 'tool_use') {
-        recommendation.toolCalls.push({
-          toolId: block.id,
-          name: block.name,
-          input: block.input,
-        });
+    let iteration = 0;
+    let response;
 
-        // Convert tool calls to structured suggestions
-        const suggestion = _toolToSuggestion(block.name, block.input);
-        if (suggestion) {
-          recommendation.suggestions.push(suggestion);
+    while (iteration < maxToolIterations) {
+      iteration++;
+      response = await anthropic.messages.create({
+        model: selectedModel,
+        max_tokens: maxTokens,
+        system: systemBlocks,
+        tools: COACHING_TOOLS,
+        messages,
+      });
+
+      // Accumulate usage across turns so billing/audit has a single total.
+      _accumulateUsage(recommendation.usage, response.usage);
+
+      // Extract text + collect tool_use blocks from this turn.
+      const toolUseBlocks = [];
+      for (const block of response.content) {
+        if (block.type === 'text') {
+          recommendation.textAnalysis = block.text;
+        } else if (block.type === 'tool_use') {
+          toolUseBlocks.push(block);
+          recommendation.toolCalls.push({
+            toolId: block.id,
+            name: block.name,
+            input: block.input,
+          });
+          const suggestion = _toolToSuggestion(block.name, block.input);
+          if (suggestion) recommendation.suggestions.push(suggestion);
         }
       }
+
+      // Terminate loop if Claude is done or produced no tools this turn.
+      if (response.stop_reason !== 'tool_use' || toolUseBlocks.length === 0) {
+        recommendation.stopReason = response.stop_reason || null;
+        break;
+      }
+
+      // Preserve the assistant turn exactly as returned, so tool_use_ids
+      // line up with the tool_results we append next.
+      messages.push({ role: 'assistant', content: response.content });
+
+      // Execute each tool via the orchestrator. On failure, send
+      // is_error: true so Claude knows to recover rather than treat
+      // the error text as legitimate data. Each invocation is logged
+      // for audit replay; logging failures never block the loop.
+      const toolResultsContent = [];
+      for (const tu of toolUseBlocks) {
+        const toolStart = Date.now();
+        let result;
+        let isError = false;
+        let errorMessage = null;
+        try {
+          result = await routeToolCall(null, tu.name, tu.input, gameState, playtimeTracker);
+          if (result && result.error) {
+            isError = true;
+            errorMessage = result.error;
+          }
+        } catch (err) {
+          result = { error: err.message };
+          isError = true;
+          errorMessage = err.message;
+        }
+        const toolLatencyMs = Date.now() - toolStart;
+
+        recommendation.toolResults.push({
+          toolId: tu.id,
+          name: tu.name,
+          result,
+          isError,
+        });
+
+        // Fire-and-forget audit log. Not awaited — DB failure must not
+        // stall the coach-facing loop.
+        logInvocation({
+          coachId,
+          gameId: gameState.gameId || null,
+          agentId: getAgentForTool(tu.name) || 'unknown',
+          toolName: tu.name,
+          input: tu.input,
+          output: result,
+          isError,
+          errorMessage,
+          iteration,
+          latencyMs: toolLatencyMs,
+        }).catch(() => {});
+
+        toolResultsContent.push({
+          type: 'tool_result',
+          tool_use_id: tu.id,
+          content: JSON.stringify(result),
+          ...(isError ? { is_error: true } : {}),
+        });
+      }
+
+      messages.push({ role: 'user', content: toolResultsContent });
+    }
+
+    recommendation.iterations = iteration;
+
+    if (iteration >= maxToolIterations && response?.stop_reason === 'tool_use') {
+      logger.warn('Line Coach hit max tool iterations without completing', {
+        gameId: gameState.gameId,
+        maxToolIterations,
+      });
+      recommendation.stopReason = 'max_iterations';
     }
 
     logger.info('Line Coach recommendations generated', {
       gameId: gameState.gameId,
       suggestionCount: recommendation.suggestions.length,
+      iterations: recommendation.iterations,
+      stopReason: recommendation.stopReason,
     });
 
     return recommendation;
@@ -98,6 +229,19 @@ export async function getLineCoachRecommendation(gameState, playtimeData, option
 }
 
 /**
+ * Merge a single API-response usage block into a running total.
+ * Safe against missing fields on either side.
+ * @private
+ */
+function _accumulateUsage(running, fromResponse) {
+  if (!fromResponse) return;
+  running.input_tokens += fromResponse.input_tokens || 0;
+  running.output_tokens += fromResponse.output_tokens || 0;
+  running.cache_creation_input_tokens += fromResponse.cache_creation_input_tokens || 0;
+  running.cache_read_input_tokens += fromResponse.cache_read_input_tokens || 0;
+}
+
+/**
  * Get position recommendation for a specific athlete
  * Uses Claude to evaluate skill fit for different positions
  *
@@ -108,8 +252,10 @@ export async function getLineCoachRecommendation(gameState, playtimeData, option
  */
 export async function getPositionRecommendation(athlete, teamRoster = [], format = 'standard') {
   try {
-    const context = buildPositionContext(athlete, teamRoster);
-    const systemPrompt = `You are a lacrosse position coach analyzing athlete skill profiles to recommend position fit.
+    const context = buildPositionContext(athlete, teamRoster, format);
+    // The static prompt is shared across all position-recommendation calls
+    // for a given format; mark it cacheable.
+    const staticSystem = `You are a lacrosse position coach analyzing athlete skill profiles to recommend position fit.
 
 Game format: ${format === '6s' ? '6v6 Sixes' : 'Standard 11v11'}
 
@@ -130,7 +276,13 @@ Be specific and actionable. Consider the athlete's overall skill profile and phy
     const response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 800,
-      system: systemPrompt,
+      system: [
+        {
+          type: 'text',
+          text: staticSystem,
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
       messages: [
         {
           role: 'user',

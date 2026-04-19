@@ -277,8 +277,82 @@ export async function getGameCallHistory(gameId, options = {}) {
   }
 }
 
+/**
+ * Log a single tool invocation from the agentic loop.
+ *
+ * One ai_call_logs row can own many ai_invocation_log rows when the loop
+ * runs multiple turns. Link via call_log_id when available.
+ *
+ * @param {Object} data
+ * @param {string} [data.coachId]
+ * @param {string} [data.gameId]
+ * @param {string} [data.callLogId] - Parent ai_call_logs.id
+ * @param {string} data.agentId     - e.g. 'lineup', 'playtime', 'roster'
+ * @param {string} data.toolName    - e.g. 'suggest_substitution'
+ * @param {Object} [data.input]     - Tool input (stored as JSONB)
+ * @param {Object} [data.output]    - Tool output/result (stored as JSONB)
+ * @param {boolean} [data.isError]
+ * @param {string} [data.errorMessage]
+ * @param {number} [data.iteration] - Which agentic-loop turn produced this call
+ * @param {number} [data.latencyMs]
+ * @returns {Promise<Object>}
+ */
+export async function logInvocation(data) {
+  try {
+    const {
+      coachId = null,
+      gameId = null,
+      callLogId = null,
+      agentId,
+      toolName,
+      input = null,
+      output = null,
+      isError = false,
+      errorMessage = null,
+      iteration = null,
+      latencyMs = null,
+    } = data;
+
+    if (!agentId || !toolName) {
+      logger.warn('logInvocation called without agentId/toolName, skipping');
+      return { error: 'agentId and toolName required' };
+    }
+
+    const result = await query(
+      `INSERT INTO ai_invocation_log
+         (coach_id, game_id, call_log_id, agent_id, tool_name,
+          input, output, is_error, error_message, iteration, latency_ms)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       RETURNING id, created_at`,
+      [
+        coachId,
+        gameId,
+        callLogId,
+        agentId,
+        toolName,
+        input  ? JSON.stringify(input)  : null,
+        output ? JSON.stringify(output) : null,
+        isError,
+        errorMessage,
+        iteration,
+        latencyMs,
+      ]
+    );
+
+    return {
+      invocationId: result.rows[0]?.id,
+      createdAt: result.rows[0]?.created_at,
+    };
+  } catch (err) {
+    // Audit logging is best-effort; never fail the caller.
+    logger.error('Error logging tool invocation:', err);
+    return { error: err.message };
+  }
+}
+
 export default {
   logAICall,
+  logInvocation,
   getCoachAIStats,
   getAggregateAIStats,
   getCoachCallHistory,
