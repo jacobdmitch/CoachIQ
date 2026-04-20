@@ -25,6 +25,12 @@ import logger from './services/logger.js';
 import { initializeDatabase, query as dbQuery } from './services/database.js';
 import { errorHandler, asyncHandler } from './middleware/errorHandler.js';
 import { scheduleGraduationSweep } from './services/graduationSweep.js';
+import requestId from './middleware/requestId.js';
+import { initSentry, expressErrorMiddleware as sentryErrorMiddleware } from './services/sentry.js';
+
+// Init Sentry as early as possible — must run before any route handlers
+// register so exceptions in startup code are captured.
+initSentry();
 
 // Route imports
 import authRouter from './routes/auth.js';
@@ -78,13 +84,18 @@ app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
+// Attach request ID before logging so every log line can be traced back to
+// a single HTTP request. Also writes X-Request-Id response header.
+app.use(requestId);
+
 // Request logging middleware
 app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
     const duration = Date.now() - start;
     logger.info(
-      `${req.method} ${req.path} - ${res.statusCode} - ${duration}ms`
+      `${req.method} ${req.path} - ${res.statusCode} - ${duration}ms`,
+      { requestId: req.id }
     );
   });
   next();
@@ -151,6 +162,8 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // Error handling middleware (must be last)
+// Forward to Sentry first (noop when SENTRY_DSN unset), then our own handler.
+app.use(sentryErrorMiddleware());
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 3001;

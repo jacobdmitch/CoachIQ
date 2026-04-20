@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import AppShell from './components/layout/AppShell.js';
 import LoginPage from './components/auth/LoginPage.js';
+import SignupPage from './components/auth/SignupPage.js';
 
 // Lazy-load page-level components to keep initial bundle small
 const SeasonDashboard  = lazy(() => import('./components/dashboard/SeasonDashboard.js'));
@@ -82,6 +83,16 @@ export default function App() {
               element={
                 <PublicRoute>
                   <LoginPage />
+                </PublicRoute>
+              }
+            />
+
+            {/* Public: signup */}
+            <Route
+              path="/signup"
+              element={
+                <PublicRoute>
+                  <SignupPage />
                 </PublicRoute>
               }
             />
