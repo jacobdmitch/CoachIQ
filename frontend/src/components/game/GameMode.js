@@ -1014,6 +1014,60 @@ export default function GameMode() {
     }
   }, [liveState]);
 
+  // ─── Proactive push handlers ─────────────────────────────────────────────
+  // Declared above the early returns below so the Rules of Hooks are not
+  // violated (every render must call the same hooks in the same order).
+  //
+  // Resolve an athleteId to a display name using the current roster. Returns
+  // null on miss so the banner can fall through to any *Name hint from the
+  // server, then to the raw UUID as a last resort.
+  const resolveAthleteName = useCallback((athleteId) => {
+    if (!athleteId) return null;
+    const a = (athletes || []).find(x => x.id === athleteId);
+    if (!a) return null;
+    const full = `${a.first_name ?? ''} ${a.last_name ?? ''}`.trim();
+    return full || null;
+  }, [athletes]);
+
+  // Accept = auto-execute the recommendation. Only SUBSTITUTION carries
+  // directly-executable fields (playerIn/playerOut/position); for every
+  // other type Accept is effectively just an acknowledgement.
+  //
+  // On sub failure we deliberately DO NOT ack — the banner stays up so the
+  // coach can retry or dismiss. On a queued-offline send we still ack,
+  // because the local sync client will flush the POST once back online.
+  const handleAcceptPush = useCallback(async (push) => {
+    if (!push) return;
+    const { pushId, suggestion = {} } = push;
+
+    if (suggestion.type === 'SUBSTITUTION') {
+      const { playerIn, playerOut, position } = suggestion;
+      if (!playerIn || !playerOut || !position) {
+        toast.error('Recommendation missing sub details');
+        return;
+      }
+      try {
+        const result = await makeSubstitution(playerOut, playerIn, position);
+        if (result?.queued) {
+          toast.info('Sub queued — will apply when back online');
+        } else {
+          toast.success('Substitution applied');
+        }
+      } catch (err) {
+        toast.error(err?.response?.data?.error || 'Substitution failed');
+        return; // keep banner visible so coach can retry or dismiss
+      }
+    }
+
+    const res = await acknowledgePush(pushId);
+    if (!res) toast.error('Could not acknowledge recommendation');
+  }, [acknowledgePush, makeSubstitution, toast]);
+
+  const handleDismissPush = useCallback(async (pushId) => {
+    const res = await dismissPush(pushId);
+    if (!res) toast.error('Could not dismiss recommendation');
+  }, [dismissPush, toast]);
+
   // Auto-generate default lines grouped by position when none exist
   async function autoGenerateLines() {
     if (!athletes || athletes.length === 0) return;
@@ -1183,57 +1237,6 @@ export default function GameMode() {
       setEnding(false);
     }
   }
-
-  // ─── Proactive push handlers ─────────────────────────────────────────────
-  // Resolve an athleteId to a display name using the current roster. Returns
-  // null on miss so the banner can fall through to any *Name hint from the
-  // server, then to the raw UUID as a last resort.
-  const resolveAthleteName = useCallback((athleteId) => {
-    if (!athleteId) return null;
-    const a = (athletes || []).find(x => x.id === athleteId);
-    if (!a) return null;
-    const full = `${a.first_name ?? ''} ${a.last_name ?? ''}`.trim();
-    return full || null;
-  }, [athletes]);
-
-  // Accept = auto-execute the recommendation. Only SUBSTITUTION carries
-  // directly-executable fields (playerIn/playerOut/position); for every
-  // other type Accept is effectively just an acknowledgement.
-  //
-  // On sub failure we deliberately DO NOT ack — the banner stays up so the
-  // coach can retry or dismiss. On a queued-offline send we still ack,
-  // because the local sync client will flush the POST once back online.
-  const handleAcceptPush = useCallback(async (push) => {
-    if (!push) return;
-    const { pushId, suggestion = {} } = push;
-
-    if (suggestion.type === 'SUBSTITUTION') {
-      const { playerIn, playerOut, position } = suggestion;
-      if (!playerIn || !playerOut || !position) {
-        toast.error('Recommendation missing sub details');
-        return;
-      }
-      try {
-        const result = await makeSubstitution(playerOut, playerIn, position);
-        if (result?.queued) {
-          toast.info('Sub queued — will apply when back online');
-        } else {
-          toast.success('Substitution applied');
-        }
-      } catch (err) {
-        toast.error(err?.response?.data?.error || 'Substitution failed');
-        return; // keep banner visible so coach can retry or dismiss
-      }
-    }
-
-    const res = await acknowledgePush(pushId);
-    if (!res) toast.error('Could not acknowledge recommendation');
-  }, [acknowledgePush, makeSubstitution, toast]);
-
-  const handleDismissPush = useCallback(async (pushId) => {
-    const res = await dismissPush(pushId);
-    if (!res) toast.error('Could not dismiss recommendation');
-  }, [dismissPush, toast]);
 
   return (
     <div className="page-content">
