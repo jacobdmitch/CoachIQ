@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import './LoginPage.css';
 
@@ -116,7 +116,12 @@ export default function LoginPage() {
 
         </form>
 
-        <p className="login-footer">CoachIQ — For the sideline, not the spreadsheet.</p>
+        <p className="login-footer">
+          Don&apos;t have an account? <Link to="/signup" style={{ color: 'var(--color-gold)' }}>Create one</Link>
+        </p>
+        <p className="login-footer" style={{ marginTop: 'var(--sp-2)' }}>
+          CoachIQ &mdash; For the sideline, not the spreadsheet.
+        </p>
       </div>
     </div>
   );

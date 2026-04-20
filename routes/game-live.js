@@ -130,6 +130,10 @@ function stopClockInterval(gameId) {
  * before the restart are not restored to the in-memory tracker (historical
  * minutes live in the playtime_log table); on-field players are marked
  * subbed-in as of the rehydrate moment so forward tracking continues.
+ *
+ * Also re-registers the proactive Line Coach scheduler so AI pushes resume
+ * after a restart. The head coach ID is pulled from game_sessions since the
+ * snapshot itself doesn't carry it.
  */
 async function ensureGameState(gameId) {
   let gameState = gameStates.get(gameId);
@@ -168,6 +172,27 @@ async function ensureGameState(gameId) {
 
   gameStates.set(gameId, gameState);
   playtimeTrackers.set(gameId, playtimeTracker);
+
+  // Re-register the proactive scheduler if the session is still active.
+  // Without this, AI pushes silently stay paused until the next game start.
+  try {
+    const sessionRes = await query(
+      `SELECT head_coach_id FROM game_sessions
+        WHERE game_id = $1 AND status = 'active'
+        ORDER BY updated_at DESC LIMIT 1`,
+      [gameId]
+    );
+    const headCoachId = sessionRes.rows[0]?.head_coach_id;
+    if (headCoachId) {
+      proactiveCoach.register(gameId, {
+        coachId: headCoachId,
+        teamId:  game.team_id,
+        format:  game.format,
+      });
+    }
+  } catch (err) {
+    logger.warn(`Proactive scheduler re-register failed for ${gameId}: ${err.message}`);
+  }
 
   logger.info(`Game state rehydrated from snapshot: ${gameId}`);
   return gameState;
@@ -330,7 +355,7 @@ router.post(
   requireGameRole(['head_coach', 'assistant']),
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
-    const gameState = gameStates.get(gameId);
+    const gameState = await ensureGameState(gameId);
 
     if (!gameState) {
       throw new AppError('Game not initialized', 400);
@@ -364,7 +389,7 @@ router.post(
   requireGameRole(['head_coach', 'assistant']),
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
-    const gameState = gameStates.get(gameId);
+    const gameState = await ensureGameState(gameId);
 
     if (!gameState) {
       throw new AppError('Game not initialized', 400);
@@ -406,7 +431,7 @@ router.post(
     const { response } = await withIdempotency(
       idempotencyKey,
       async () => {
-        const gameState = gameStates.get(gameId);
+        const gameState = await ensureGameState(gameId);
         if (!gameState) {
           throw new AppError('Game not initialized', 400);
         }
@@ -466,7 +491,7 @@ router.post(
     const { cached, response } = await withIdempotency(
       idempotencyKey,
       async () => {
-        const gameState = gameStates.get(gameId);
+        const gameState = await ensureGameState(gameId);
         if (!gameState) {
           throw new AppError('Game not initialized', 400);
         }
@@ -517,7 +542,7 @@ router.post(
     const { response } = await withIdempotency(
       idempotencyKey,
       async () => {
-        const gameState = gameStates.get(gameId);
+        const gameState = await ensureGameState(gameId);
         if (!gameState) {
           throw new AppError('Game not initialized', 400);
         }
@@ -650,7 +675,7 @@ router.delete(
     const { response } = await withIdempotency(
       idempotencyKey,
       async () => {
-        const gameState = gameStates.get(gameId);
+        const gameState = await ensureGameState(gameId);
         if (!gameState) throw new AppError('Game not initialized', 400);
 
         const removed = gameState.undoLastStatEvent();
@@ -740,7 +765,7 @@ router.post(
     const { response } = await withIdempotency(
       idempotencyKey,
       async () => {
-        const gameState = gameStates.get(gameId);
+        const gameState = await ensureGameState(gameId);
         if (!gameState) {
           throw new AppError('Game not initialized', 400);
         }
@@ -778,7 +803,10 @@ router.get(
   authenticateToken,
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
-    const gameState = gameStates.get(gameId);
+    // Rehydrate from snapshot if in-memory state is gone (dyno restart).
+    // Clients polling /state on reconnect would otherwise 404 even though
+    // the session is still active in game_sessions.
+    const gameState = await ensureGameState(gameId);
 
     if (!gameState) {
       throw new AppError('Game not initialized', 404);
@@ -800,6 +828,10 @@ router.get(
   authenticateToken,
   asyncHandler(async (req, res) => {
     const { gameId } = req.params;
+    // Force rehydrate if needed so the tracker Map is populated. After a
+    // restart the tracker returns post-rehydrate stints only — historical
+    // minutes are persisted in the playtime_log table, not rebuilt here.
+    await ensureGameState(gameId);
     const playtimeTracker = playtimeTrackers.get(gameId);
 
     if (!playtimeTracker) {
@@ -950,7 +982,7 @@ router.post(
     const { response } = await withIdempotency(
       idempotencyKey,
       async () => {
-        const gameState = gameStates.get(gameId);
+        const gameState = await ensureGameState(gameId);
         if (!gameState) throw new AppError('Game not initialized', 400);
 
         const playtimeTracker = playtimeTrackers.get(gameId);
@@ -1039,7 +1071,7 @@ router.delete(
   requireGameRole(['head_coach', 'assistant']),
   asyncHandler(async (req, res) => {
     const { gameId, queueId } = req.params;
-    const gameState = gameStates.get(gameId);
+    const gameState = await ensureGameState(gameId);
     if (!gameState) throw new AppError('Game not initialized', 400);
 
     gameState.removeFromQueue(queueId);
@@ -1060,7 +1092,7 @@ router.delete(
   requireGameRole(['head_coach', 'assistant']),
   asyncHandler(async (req, res) => {
     const { gameId, queueId, moveId } = req.params;
-    const gameState = gameStates.get(gameId);
+    const gameState = await ensureGameState(gameId);
     if (!gameState) throw new AppError('Game not initialized', 400);
 
     gameState.removeMoveFromQueue(queueId, moveId);
@@ -1086,7 +1118,7 @@ router.post(
     const { response } = await withIdempotency(
       idempotencyKey,
       async () => {
-        const gameState = gameStates.get(gameId);
+        const gameState = await ensureGameState(gameId);
         if (!gameState) throw new AppError('Game not initialized', 400);
 
         const result = gameState.executeBatchSub();

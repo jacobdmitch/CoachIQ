@@ -60,6 +60,36 @@ export function AuthProvider({ children }) {
     return res.data;
   }, []);
 
+  /**
+   * register — create a new coach account. Mirrors login() in that it stores
+   * the returned token, populates coach + (optional) team, and returns the
+   * raw response so callers can route based on whether a team was created.
+   *
+   * Fields matched to the backend /auth/register endpoint: email, password,
+   * firstName, lastName, teamName (all optional except email + password).
+   */
+  const register = useCallback(async ({ email, password, firstName, lastName, teamName }) => {
+    const res = await apiClient.post('/auth/register', {
+      email,
+      password,
+      firstName,
+      lastName,
+      teamName,
+    });
+    const { coach: coachData, token, refreshToken, teams } = res.data;
+
+    localStorage.setItem('token', token);
+    if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+
+    setCoach(coachData);
+    if (teams?.length > 0) {
+      setTeam(normalizeTeam(teams[0]));
+      localStorage.setItem('activeTeamId', teams[0].id);
+    }
+
+    return res.data;
+  }, []);
+
   const logout = useCallback(() => {
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
@@ -97,6 +127,7 @@ export function AuthProvider({ children }) {
       isAuthenticated: !!coach,
       isLoading,
       login,
+      register,
       logout,
       setActiveTeam,
       updateTeam,
