@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -19,6 +19,7 @@ import OpponentStatsPanel from './OpponentStatsPanel';
 import OpponentThreatsPanel from './OpponentThreatsPanel';
 import GameClocksPanel from './GameClocksPanel';
 import AICoachPanel from '../ai/AICoachPanel';
+import ProactivePushBanner from '../ai/ProactivePushBanner';
 import { formatDateTime } from '../../utils/formatters';
 
 const PERIODS = ['1st', '2nd', '3rd', '4th', 'OT'];
@@ -949,7 +950,9 @@ export default function GameMode() {
     connected, online, queueLength,
     liveState, clockTime, mergeAlerts, activating,
     playtime, equityFlags, threats,
+    proactivePush, acknowledgePush, dismissPush,
     startClock, stopClock, logStat, logOpponentEvent,
+    makeSubstitution,
     addToQueue, removeFromQueue, removeMoveFromQueue, activateQueue,
   } = useGameSocket(gameId, token);
 
@@ -1181,8 +1184,69 @@ export default function GameMode() {
     }
   }
 
+  // ─── Proactive push handlers ─────────────────────────────────────────────
+  // Resolve an athleteId to a display name using the current roster. Returns
+  // null on miss so the banner can fall through to any *Name hint from the
+  // server, then to the raw UUID as a last resort.
+  const resolveAthleteName = useCallback((athleteId) => {
+    if (!athleteId) return null;
+    const a = (athletes || []).find(x => x.id === athleteId);
+    if (!a) return null;
+    const full = `${a.first_name ?? ''} ${a.last_name ?? ''}`.trim();
+    return full || null;
+  }, [athletes]);
+
+  // Accept = auto-execute the recommendation. Only SUBSTITUTION carries
+  // directly-executable fields (playerIn/playerOut/position); for every
+  // other type Accept is effectively just an acknowledgement.
+  //
+  // On sub failure we deliberately DO NOT ack — the banner stays up so the
+  // coach can retry or dismiss. On a queued-offline send we still ack,
+  // because the local sync client will flush the POST once back online.
+  const handleAcceptPush = useCallback(async (push) => {
+    if (!push) return;
+    const { pushId, suggestion = {} } = push;
+
+    if (suggestion.type === 'SUBSTITUTION') {
+      const { playerIn, playerOut, position } = suggestion;
+      if (!playerIn || !playerOut || !position) {
+        toast.error('Recommendation missing sub details');
+        return;
+      }
+      try {
+        const result = await makeSubstitution(playerOut, playerIn, position);
+        if (result?.queued) {
+          toast.info('Sub queued — will apply when back online');
+        } else {
+          toast.success('Substitution applied');
+        }
+      } catch (err) {
+        toast.error(err?.response?.data?.error || 'Substitution failed');
+        return; // keep banner visible so coach can retry or dismiss
+      }
+    }
+
+    const res = await acknowledgePush(pushId);
+    if (!res) toast.error('Could not acknowledge recommendation');
+  }, [acknowledgePush, makeSubstitution, toast]);
+
+  const handleDismissPush = useCallback(async (pushId) => {
+    const res = await dismissPush(pushId);
+    if (!res) toast.error('Could not dismiss recommendation');
+  }, [dismissPush, toast]);
+
   return (
     <div className="page-content">
+
+      {/* ── Proactive Line Coach push ──────────────────── */}
+      {/* Fixed-position banner; renders null when no active push.
+          Accept auto-executes SUBSTITUTION; other types just ack. */}
+      <ProactivePushBanner
+        push={proactivePush}
+        onAcknowledge={handleAcceptPush}
+        onDismiss={handleDismissPush}
+        resolveAthleteName={resolveAthleteName}
+      />
 
       {/* ── Header ──────────────────────────────────────── */}
       <div className="page-header">

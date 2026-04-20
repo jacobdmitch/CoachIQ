@@ -9,6 +9,7 @@ import { COACHING_TOOLS } from './agents/toolDefinitions.js';
 import { routeToolCall, getAgentForTool } from './agents/orchestrator.js';
 import { logInvocation } from './aiCallLogger.js';
 import { selectModel } from './ai/modelSelector.js';
+import { assemble as assembleRagContext, RISK_TIERS } from './ai/ragContextAssembler.js';
 import logger from './logger.js';
 
 const anthropic = new Anthropic({
@@ -19,6 +20,14 @@ const anthropic = new Anthropic({
 // onto the selector yet. Any new call site should use selectModel().
 const MODEL = 'claude-haiku-4-5-20251001';
 const DEFAULT_MAX_TOOL_ITERATIONS = 5;
+
+// Write-tier tools that should pull fresh DB context via the RAG assembler
+// before Claude sees the next turn. Kept as a static map so adding a new
+// write-tier tool is a one-line change here.
+const RAG_TRIGGER_TIERS = {
+  suggest_substitution: RISK_TIERS.LINEUP_WRITE,
+  evaluate_lineup:      RISK_TIERS.LINEUP_WRITE,
+};
 
 /**
  * Get Line Coach recommendations for current game state
@@ -38,6 +47,8 @@ export async function getLineCoachRecommendation(gameState, playtimeData, option
       playtimeTracker = null,
       maxToolIterations = DEFAULT_MAX_TOOL_ITERATIONS,
       coachId = null,
+      teamId = null,
+      isLiveGame = false,
     } = options;
 
     // Build context for Claude
@@ -77,9 +88,12 @@ export async function getLineCoachRecommendation(gameState, playtimeData, option
 
     // Pick model + token budget per intent signals. Default path stays on
     // Haiku/1024 so behavior is unchanged for current callers; deliberative
-    // focusAreas escalate to Sonnet automatically.
+    // focusAreas escalate to Sonnet automatically. isLiveGame without a
+    // focusArea flips to a terse token budget (used by the proactive push
+    // scheduler where responses are one-line cards, not long analyses).
     const { model: selectedModel, maxTokens, tier } = selectModel({
       focusArea,
+      isLiveGame,
     });
 
     const recommendation = {
@@ -144,11 +158,26 @@ export async function getLineCoachRecommendation(gameState, playtimeData, option
       // line up with the tool_results we append next.
       messages.push({ role: 'assistant', content: response.content });
 
+      // RAG pre-fetch: if any tool_use in this turn is a write-tier tool,
+      // pull fresh DB context keyed by tier and prepend it as a text block
+      // to the user turn that carries the tool_results. The assembler is
+      // cached (90s TTL) so repeats within a burst are effectively free.
+      // Skipped entirely when teamId is absent or the assembler errors -
+      // the loop must stay silent on RAG failure and rely on in-memory
+      // state the same way it did before this wiring.
+      const ragPreamble = await _fetchRagPreamble(
+        toolUseBlocks,
+        { gameId: gameState.gameId, teamId }
+      );
+
       // Execute each tool via the orchestrator. On failure, send
       // is_error: true so Claude knows to recover rather than treat
       // the error text as legitimate data. Each invocation is logged
       // for audit replay; logging failures never block the loop.
       const toolResultsContent = [];
+      if (ragPreamble) {
+        toolResultsContent.push({ type: 'text', text: ragPreamble });
+      }
       for (const tu of toolUseBlocks) {
         const toolStart = Date.now();
         let result;
@@ -226,6 +255,52 @@ export async function getLineCoachRecommendation(gameState, playtimeData, option
       toolCalls: [],
     };
   }
+}
+
+/**
+ * Fetch RAG pre-call context for any write-tier tool_uses in the current
+ * turn and format the result as a compact text block.
+ *
+ * Returns null when:
+ *   - no tool_use in this turn maps to a risk tier
+ *   - teamId is missing (legacy callers or route without team context)
+ *   - every assemble() call errored (assembler logs its own failures)
+ *
+ * Multiple tool_uses in the same turn that map to the same tier produce
+ * only one fetch thanks to the Set-based dedupe; the assembler's internal
+ * cache (90s TTL) then absorbs repeat tiers across iterations.
+ *
+ * @private
+ */
+async function _fetchRagPreamble(toolUseBlocks, { gameId, teamId }) {
+  if (!teamId) return null;
+
+  const tiers = new Set();
+  for (const tu of toolUseBlocks) {
+    const tier = RAG_TRIGGER_TIERS[tu.name];
+    if (tier) tiers.add(tier);
+  }
+  if (tiers.size === 0) return null;
+
+  const results = await Promise.all(
+    [...tiers].map((tier) => assembleRagContext(tier, { gameId, teamId }))
+  );
+
+  const sections = [];
+  for (const r of results) {
+    if (!r || r.error || !r.data) continue;
+    sections.push(
+      `### ${r.tier}${r.cacheHit ? ' (cached)' : ''}\n` +
+      JSON.stringify(r.data, null, 2)
+    );
+  }
+  if (sections.length === 0) return null;
+
+  return (
+    'Fresh DB context pulled for the write-tier tools in this turn. ' +
+    'Use it to validate or refine your recommendation before finalizing.\n\n' +
+    sections.join('\n\n')
+  );
 }
 
 /**

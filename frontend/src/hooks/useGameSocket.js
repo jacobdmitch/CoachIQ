@@ -40,6 +40,10 @@ export function useGameSocket(gameId, token) {
   const [playtime,     setPlaytime]     = useState([]);
   const [equityFlags,  setEquityFlags]  = useState([]);
   const [threats,      setThreats]      = useState([]);
+  // Current proactive Line Coach push, or null. Replace-with-newest: only
+  // one is visible at a time; a fresh arrival overwrites the previous.
+  // Shape: { pushId, pushedAt, reason, suggestion }
+  const [proactivePush, setProactivePush] = useState(null);
 
   // ─── Helper: apply a full server snapshot to our local caches ─────────────
   const applySnapshot = useCallback((snapshot) => {
@@ -157,6 +161,15 @@ export function useGameSocket(gameId, token) {
       }
     });
 
+    // Proactive Line Coach push. Server picks at most one suggestion per
+    // evaluation cycle (see services/ai/proactiveCoach.js) and emits the
+    // full push row plus the rec payload. Replace-with-newest: we only
+    // hold one on screen at a time; later pushes overwrite.
+    socket.on('ai:recommendation', (push) => {
+      if (!push || !push.pushId) return;
+      setProactivePush(push);
+    });
+
     return () => {
       socket.emit('leave_game', { gameId });
       socket.disconnect();
@@ -265,6 +278,36 @@ export function useGameSocket(gameId, token) {
 
   const dismissMergeAlerts = useCallback(() => setMergeAlerts([]), []);
 
+  // ─── Proactive push ack / dismiss ─────────────────────────────────────────
+  // Optimistic: clear local state first so the banner disappears instantly,
+  // then POST. A failed API call is logged but not surfaced — the scheduler
+  // will either re-push (if the rec still applies) or stay quiet (cooldown).
+  const acknowledgePush = useCallback(async (pushId) => {
+    if (!pushId) return null;
+    setProactivePush(prev => (prev && prev.pushId === pushId ? null : prev));
+    try {
+      const res = await apiClient.post(`/ai-coach/proactive/${pushId}/ack`);
+      return res.data;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('ack push failed:', err?.response?.data?.error || err.message);
+      return null;
+    }
+  }, []);
+
+  const dismissPush = useCallback(async (pushId) => {
+    if (!pushId) return null;
+    setProactivePush(prev => (prev && prev.pushId === pushId ? null : prev));
+    try {
+      const res = await apiClient.post(`/ai-coach/proactive/${pushId}/dismiss`);
+      return res.data;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('dismiss push failed:', err?.response?.data?.error || err.message);
+      return null;
+    }
+  }, []);
+
   return {
     connected,
     online,
@@ -277,6 +320,9 @@ export function useGameSocket(gameId, token) {
     playtime,
     equityFlags,
     threats,
+    proactivePush,
+    acknowledgePush,
+    dismissPush,
     startClock,
     stopClock,
     logGoal,

@@ -1,0 +1,186 @@
+/* ═══════════════════════════════════════════════════════════
+   ProactivePushBanner — top-anchored live-game push surface
+   ─────────────────────────────────────────────────────────
+   Tokens live in styles/tokens.css. Sunlight theme overrides
+   border + shadow via var overrides on body.theme-sunlight.
+   ═══════════════════════════════════════════════════════════ */
+
+.ppush-banner {
+  position: fixed;
+  top: var(--safe-top, 0);
+  left: 0;
+  right: 0;
+  z-index: 200;
+
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-5);
+
+  background: var(--color-surface-1);
+  border-bottom: 3px solid var(--color-gold);
+  box-shadow: var(--shadow-lg);
+
+  font-family: var(--font-body);
+  color: var(--color-text-primary);
+
+  /* Slide animation */
+  transform: translateY(-100%);
+  opacity: 0;
+  transition:
+    transform var(--ease-slow),
+    opacity  var(--ease-slow);
+  will-change: transform, opacity;
+}
+
+.ppush-banner.ppush-visible {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.ppush-banner.ppush-hidden {
+  transform: translateY(-100%);
+  opacity: 0;
+}
+
+/* ─── Urgency accents ──────────────────────────────────── */
+
+.ppush-banner.ppush-urgency-high {
+  border-bottom-color: var(--color-red);
+  background: linear-gradient(
+    180deg,
+    var(--color-red-bg) 0%,
+    var(--color-surface-1) 60%
+  );
+}
+
+.ppush-banner.ppush-urgency-medium {
+  border-bottom-color: var(--color-amber);
+}
+
+.ppush-banner.ppush-urgency-low {
+  border-bottom-color: var(--color-blue);
+}
+
+/* ─── Content ──────────────────────────────────────────── */
+
+.ppush-content {
+  flex: 1 1 auto;
+  min-width: 0;       /* allow text to ellipsize inside flex */
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.ppush-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.ppush-type {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--color-gold);
+}
+
+.ppush-reason {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.ppush-body {
+  font-size: var(--text-base);
+  line-height: var(--leading-snug);
+  color: var(--color-text-primary);
+}
+
+.ppush-sub-line {
+  font-family: var(--font-stats);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.ppush-arrow {
+  color: var(--color-gold);
+  font-size: var(--text-xl);
+  line-height: 1;
+}
+
+.ppush-sub-reason {
+  margin-top: var(--sp-1);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  line-height: var(--leading-snug);
+}
+
+.ppush-fallback {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+/* ─── Actions ──────────────────────────────────────────── */
+
+.ppush-actions {
+  display: flex;
+  gap: var(--sp-3);
+  flex-shrink: 0;
+}
+
+/* Enforce HIG 44pt min touch target even on small form factors.
+   Button sizes are already `lg`, this is a floor. */
+.ppush-actions .btn {
+  min-height: 48px;
+  min-width: 96px;
+}
+
+/* ─── Tablet / small-screen tweaks ─────────────────────── */
+
+@media (max-width: 900px) {
+  .ppush-banner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+  }
+  .ppush-actions {
+    justify-content: flex-end;
+  }
+}
+
+/* ─── Reduced-motion users get a fade only ─────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .ppush-banner {
+    transition: opacity var(--ease-base);
+    transform: none !important;
+  }
+}
+
+/* ─── Sunlight theme — bump visual weight ──────────────── */
+
+body.theme-sunlight .ppush-banner {
+  background: var(--color-surface-0);
+  border-bottom-width: 4px;
+  box-shadow: var(--shadow-gold);
+}
+
+body.theme-sunlight .ppush-type {
+  color: var(--color-gold);
+}
+
+body.theme-sunlight .ppush-body {
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
