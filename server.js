@@ -55,9 +55,19 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const server = http.createServer(app);
+
+// Allowed CORS origins: the configured web origin(s) plus the native iOS
+// (Capacitor) WebView origin, so the bundled App Store build can reach the
+// REST API and Socket.io. CORS_ORIGIN may be a comma-separated list.
+const allowedOrigins = (process.env.CORS_ORIGIN || 'https://coachiq.onrender.com')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean)
+  .concat(['capacitor://localhost']);
+
 const io = new SocketIOServer(server, {
   cors: {
-    origin: process.env.CORS_ORIGIN || 'https://coachiq.onrender.com',
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
     credentials: true,
   },
@@ -76,7 +86,7 @@ app.use(helmet({
 }));
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || 'https://coachiq.onrender.com',
+    origin: allowedOrigins,
     credentials: true,
   })
 );

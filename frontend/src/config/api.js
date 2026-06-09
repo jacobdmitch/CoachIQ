@@ -1,11 +1,16 @@
 import axios from 'axios';
+import localAdapter from '../local/localAdapter';
 
+const LOCAL_MODE = process.env.REACT_APP_LOCAL_MODE === 'true';
 const API_BASE_URL = process.env.REACT_APP_API_URL || '/api';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
   headers: { 'Content-Type': 'application/json' },
+  // Standalone mode: fulfil every request from on-device storage instead of
+  // the network. No other code changes — the screens keep using apiClient.
+  ...(LOCAL_MODE ? { adapter: localAdapter } : {}),
 });
 
 // ─── Request interceptor — attach the access token ────────────────────────────

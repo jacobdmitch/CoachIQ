@@ -4,8 +4,11 @@ import apiClient from '../config/api';
 import { SyncClient } from '../services/syncClient';
 import { LocalGameState } from '../services/localGameState';
 import { listPending } from '../services/offlineQueue';
+import { nearby, makeRoomCode } from '../local/p2p';
+import * as store from '../local/localDb';
 
 const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || window.location.origin;
+const LOCAL_MODE = process.env.REACT_APP_LOCAL_MODE === 'true';
 
 /**
  * useGameSocket — manages the live-game connection.
@@ -45,6 +48,12 @@ export function useGameSocket(gameId, token) {
   // Shape: { pushId, pushedAt, reason, suggestion }
   const [proactivePush, setProactivePush] = useState(null);
 
+  // ─── Nearby (Bluetooth/local-WiFi) multi-coach state ──────────────────────
+  const nearbyRoleRef = useRef('idle'); // 'host' | 'guest' | 'idle'
+  const [nearbyRole, setNearbyRole] = useState('idle');
+  const [nearbyRoom, setNearbyRoom] = useState('');
+  const [nearbyPeers, setNearbyPeers] = useState(0);
+
   // ─── Helper: apply a full server snapshot to our local caches ─────────────
   const applySnapshot = useCallback((snapshot) => {
     if (!snapshot) return;
@@ -54,6 +63,98 @@ export function useGameSocket(gameId, token) {
     else localStateRef.current = new LocalGameState(snapshot);
   }, []);
 
+  // ─── Nearby: host broadcasts authoritative state; guest applies it ─────────
+  const broadcastState = useCallback(async () => {
+    if (nearbyRoleRef.current !== 'host' || !gameId) return;
+    try {
+      const [{ data: s }, { data: pt }] = await Promise.all([
+        apiClient.get(`/game-live/${gameId}/state`),
+        apiClient.get(`/game-live/${gameId}/playtime`),
+      ]);
+      nearby.send({ t: 'state', state: s?.state, playtime: pt?.summary, equityFlags: pt?.equityFlags });
+    } catch { /* not started yet */ }
+  }, [gameId]);
+
+  const sendBootstrap = useCallback(async () => {
+    if (!gameId) return;
+    try {
+      const { data: g } = await apiClient.get(`/games/${gameId}`);
+      const teamId = g.game.team_id;
+      const { data: r } = await apiClient.get('/athletes', { params: { teamId } });
+      let season = null;
+      try { season = (await apiClient.get(`/seasons/${g.game.season_id}`)).data.season; } catch { /* none */ }
+      const roster = (r.athletes || []).map((a) => ({ ...a, team_id: teamId }));
+      nearby.send({ t: 'bootstrap', game: g.game, roster, season });
+    } catch { /* ignore */ }
+  }, [gameId]);
+
+  const applyBootstrap = useCallback(async (msg) => {
+    await store.ready();
+    const upsert = (coll, row) => (store.getById(coll, row.id) ? store.update(coll, row.id, row) : store.insert(coll, row));
+    if (msg.season) upsert('seasons', msg.season);
+    if (msg.game) upsert('games', msg.game);
+    (msg.roster || []).forEach((a) => upsert('athletes', a));
+    await store.persistNow();
+  }, []);
+
+  const handleNearbyMessage = useCallback(async (msg) => {
+    if (!msg) return;
+    if (nearbyRoleRef.current === 'host') {
+      if (msg.t === 'mutation') {
+        try {
+          const m = String(msg.method || 'POST').toLowerCase();
+          if (m === 'post') await apiClient.post(msg.path, msg.body || {});
+          else if (m === 'delete') await apiClient.delete(msg.path);
+          await broadcastState();
+        } catch { /* guest action failed — host stays source of truth */ }
+      }
+    } else if (nearbyRoleRef.current === 'guest') {
+      if (msg.t === 'state' && msg.state) {
+        applySnapshot(msg.state);
+        if (Array.isArray(msg.playtime)) setPlaytime(msg.playtime);
+        if (Array.isArray(msg.equityFlags)) setEquityFlags(msg.equityFlags);
+      } else if (msg.t === 'bootstrap') {
+        await applyBootstrap(msg);
+      }
+    }
+  }, [broadcastState, applySnapshot, applyBootstrap]);
+
+  const startNearbyHost = useCallback(async () => {
+    const room = makeRoomCode();
+    nearbyRoleRef.current = 'host';
+    setNearbyRole('host');
+    setNearbyRoom(room);
+    await nearby.startHost(room, {
+      onMessage: handleNearbyMessage,
+      onPeers: async (peers) => {
+        setNearbyPeers(peers.length);
+        if (peers.length > 0) { await sendBootstrap(); await broadcastState(); }
+      },
+    });
+    return room;
+  }, [handleNearbyMessage, sendBootstrap, broadcastState]);
+
+  const startNearbyGuest = useCallback(async (room) => {
+    nearbyRoleRef.current = 'guest';
+    setNearbyRole('guest');
+    setNearbyRoom(room);
+    await nearby.startGuest(room, {
+      onMessage: handleNearbyMessage,
+      onPeers: (peers) => setNearbyPeers(peers.length),
+    });
+  }, [handleNearbyMessage]);
+
+  const stopNearby = useCallback(async () => {
+    await nearby.stop();
+    nearbyRoleRef.current = 'idle';
+    setNearbyRole('idle');
+    setNearbyPeers(0);
+    setNearbyRoom('');
+  }, []);
+
+  // Tear down any nearby session when the hook unmounts.
+  useEffect(() => () => { nearby.stop().catch(() => {}); }, []);
+
   // ─── Sync client lifecycle ────────────────────────────────────────────────
   useEffect(() => {
     if (!gameId || !token) return undefined;
@@ -61,6 +162,7 @@ export function useGameSocket(gameId, token) {
     const sync = new SyncClient({
       gameId,
       apiClient,
+      localMode: LOCAL_MODE,
       onOnline:  () => setOnline(true),
       onOffline: () => setOnline(false),
       onQueueChange: (ops) => setQueueLength(ops.length),
@@ -91,6 +193,26 @@ export function useGameSocket(gameId, token) {
   // ─── Socket lifecycle ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!gameId || !token) return undefined;
+
+    if (LOCAL_MODE) {
+      // No server in standalone mode — drive the live UI by polling the local
+      // engine: clock every second, playtime/equity every five.
+      setConnected(true);
+      const clockTimer = setInterval(async () => {
+        try {
+          const { data } = await apiClient.get(`/game-live/${gameId}/state`);
+          if (data?.state) { setClockTime(data.state.clockTime ?? null); applySnapshot(data.state); }
+        } catch { /* game not started yet */ }
+      }, 1000);
+      const ptTimer = setInterval(async () => {
+        try {
+          const { data } = await apiClient.get(`/game-live/${gameId}/playtime`);
+          if (Array.isArray(data?.summary)) setPlaytime(data.summary);
+          if (Array.isArray(data?.equityFlags)) setEquityFlags(data.equityFlags);
+        } catch { /* ignore */ }
+      }, 5000);
+      return () => { clearInterval(clockTimer); clearInterval(ptTimer); setConnected(false); };
+    }
 
     const socket = io(`${SOCKET_URL}/game`, {
       auth: { token },
@@ -181,7 +303,6 @@ export function useGameSocket(gameId, token) {
   // ─── Helper: route a mutation through sync + local optimistic apply ───────
   const send = useCallback(async (method, path, body, localApply) => {
     const sync = syncRef.current;
-    if (!sync) return null;
 
     // Optimistic local apply — runs whether online or offline so the UI is
     // instant either way. Server broadcasts will reconcile any drift.
@@ -192,14 +313,25 @@ export function useGameSocket(gameId, token) {
       if (snap.clockTime != null) setClockTime(snap.clockTime);
     }
 
+    // Guest: the host owns the game. Forward the action over the nearby link
+    // and let the host's broadcast reconcile our view.
+    if (nearbyRoleRef.current === 'guest') {
+      nearby.send({ t: 'mutation', method, path, body });
+      return { queued: false, p2p: true };
+    }
+
+    if (!sync) return null;
     try {
-      return await sync.send(method, path, body);
+      const res = await sync.send(method, path, body);
+      // Host: push the new authoritative state to connected assistants.
+      if (nearbyRoleRef.current === 'host') broadcastState();
+      return res;
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error(`${method} ${path} failed:`, err?.response?.data?.error || err.message);
       return null;
     }
-  }, []);
+  }, [broadcastState]);
 
   // ─── Clock ────────────────────────────────────────────────────────────────
   const startClock = useCallback(() => send(
@@ -334,5 +466,12 @@ export function useGameSocket(gameId, token) {
     removeMoveFromQueue,
     activateQueue,
     dismissMergeAlerts,
+    // Nearby (Bluetooth/local-WiFi) multi-coach
+    nearbyRole,
+    nearbyRoom,
+    nearbyPeers,
+    startNearbyHost,
+    startNearbyGuest,
+    stopNearby,
   };
 }

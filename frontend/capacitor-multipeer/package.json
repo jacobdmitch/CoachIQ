@@ -1,0 +1,27 @@
+{
+  "name": "capacitor-coachiq-multipeer",
+  "version": "0.1.0",
+  "description": "Multipeer Connectivity (Bluetooth + local WiFi) bridge for CoachIQ multi-coach sync",
+  "main": "src/index.js",
+  "module": "src/index.js",
+  "types": "src/index.d.ts",
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    }
+  },
+  "files": [
+    "ios",
+    "src",
+    "CoachiqMultipeer.podspec"
+  ],
+  "keywords": [
+    "capacitor",
+    "multipeer",
+    "lacrosse"
+  ],
+  "peerDependencies": {
+    "@capacitor/core": ">=7.0.0"
+  },
+  "license": "MIT"
+}

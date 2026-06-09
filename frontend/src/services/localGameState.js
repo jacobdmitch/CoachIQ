@@ -76,8 +76,8 @@ export class LocalGameState {
     }
     if (!outPosition) return false;
 
-    this.state.fieldPositions[position] = playerIn;
     this.state.fieldPositions[outPosition] = null;
+    this.state.fieldPositions[position] = playerIn;
     this.state.bench = this.state.bench.filter(id => id !== playerIn);
     this.state.bench.push(playerOut);
     return true;

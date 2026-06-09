@@ -30,6 +30,7 @@ export class SyncClient {
   constructor({
     gameId,
     apiClient,
+    localMode = false,
     onOnline = () => {},
     onOffline = () => {},
     onQueueChange = () => {},
@@ -38,9 +39,12 @@ export class SyncClient {
   }) {
     this.gameId = gameId;
     this.apiClient = apiClient;
+    this.localMode = localMode;
     this.callbacks = { onOnline, onOffline, onQueueChange, onReconcile, onError };
 
-    this.online = typeof navigator !== 'undefined' ? navigator.onLine : true;
+    // Standalone mode: the on-device backend is always reachable, so we're
+    // permanently "online" and mutations go straight through (never queued).
+    this.online = localMode ? true : (typeof navigator !== 'undefined' ? navigator.onLine : true);
     this.draining = false;
     this.pingTimer = null;
     this.latestSeqNo = 0;
@@ -50,6 +54,12 @@ export class SyncClient {
   }
 
   start() {
+    // Standalone mode: no connectivity detection or heartbeat — just reconcile
+    // once from the on-device backend.
+    if (this.localMode) {
+      this.drain().catch(err => this.callbacks.onError(err));
+      return;
+    }
     if (typeof window !== 'undefined') {
       window.addEventListener('online',  this._handleOnline);
       window.addEventListener('offline', this._handleOffline);

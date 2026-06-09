@@ -3,7 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/ios": "^7.0.0",
+    "@capacitor/splash-screen": "^7.0.0",
+    "@capacitor/status-bar": "^7.0.0",
     "@sentry/react": "^10.49.0",
+    "capacitor-coachiq-multipeer": "file:./capacitor-multipeer",
     "axios": "^1.6.7",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -15,7 +20,11 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "build:ios": "react-scripts build",
+    "ios:assets": "capacitor-assets generate --ios",
+    "ios:sync": "npm run build:ios && npx cap sync ios",
+    "ios": "npm run build:ios && npx cap sync ios && npx cap open ios"
   },
   "eslintConfig": {
     "extends": [
@@ -35,6 +44,8 @@
     ]
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.0",
+    "@capacitor/cli": "^7.0.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1"
