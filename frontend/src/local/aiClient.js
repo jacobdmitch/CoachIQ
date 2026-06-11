@@ -37,19 +37,30 @@ async function callProxy(endpoint, payload) {
     throw err;
   }
   const attest = await getAttestation(payload);
-  const res = await fetch(`${PROXY.replace(/\/$/, '')}/${endpoint}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(attest ? { 'X-Attest-Assertion': attest.assertion, 'X-Attest-Key': attest.keyId } : {}),
-    },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`AI proxy ${res.status}: ${text || res.statusText}`);
+  // Abort a hung connection after 10s so the AI panel can't spin forever.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+  try {
+    const res = await fetch(`${PROXY.replace(/\/$/, '')}/${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(attest ? { 'X-Attest-Assertion': attest.assertion, 'X-Attest-Key': attest.keyId } : {}),
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`AI proxy ${res.status}: ${text || res.statusText}`);
+    }
+    return await res.json();
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('AI request timed out');
+    throw e;
+  } finally {
+    clearTimeout(timer);
   }
-  return res.json();
 }
 
 /**
@@ -89,4 +100,9 @@ export async function aiPositionAnalysis({ athlete, engine }) {
   return data.text || data.textAnalysis || '';
 }
 
-export default { aiRecommend, aiPositionAnalysis };
+export async function aiRecap({ recap }) {
+  const data = await callProxy('recap', { recap });
+  return data.text || data.textAnalysis || '';
+}
+
+export default { aiRecommend, aiPositionAnalysis, aiRecap };

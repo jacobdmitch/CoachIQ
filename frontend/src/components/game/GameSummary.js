@@ -21,6 +21,7 @@ export default function GameSummary() {
 
   const [game,    setGame]    = useState(null);
   const [stats,   setStats]   = useState(null);
+  const [recap,   setRecap]   = useState(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState(null);
 
@@ -37,6 +38,10 @@ export default function GameSummary() {
         if (cancelled) return;
         setGame(gameRes.data.game);
         setStats(statsRes.data);
+        // Recap is best-effort: a failure must never break the summary page.
+        apiClient.post(`/ai-coach/recap/${gameId}`)
+          .then((r) => { if (!cancelled) setRecap(r.data?.recap || null); })
+          .catch(() => {});
       } catch (err) {
         if (!cancelled) setError(err.response?.data?.error || 'Failed to load game summary.');
       } finally {
@@ -133,6 +138,18 @@ export default function GameSummary() {
                 {game.score_away}
               </p>
             </div>
+          </div>
+        </>
+      )}
+
+      {/* Recap */}
+      {recap?.narrative && (
+        <>
+          <p className="section-heading">Recap</p>
+          <div className="card" style={{ marginBottom: 'var(--sp-8)' }}>
+            <p style={{ fontFamily: 'var(--font-body)', fontWeight: 400, fontSize: 'var(--text-base)', color: 'var(--color-text-primary)', lineHeight: 1.6 }}>
+              {recap.narrative}
+            </p>
           </div>
         </>
       )}

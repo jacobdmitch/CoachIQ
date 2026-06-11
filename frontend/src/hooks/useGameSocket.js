@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { io } from 'socket.io-client';
 import apiClient from '../config/api';
 import { SyncClient } from '../services/syncClient';
 import { LocalGameState } from '../services/localGameState';
@@ -7,7 +6,6 @@ import { listPending } from '../services/offlineQueue';
 import { nearby, makeRoomCode } from '../local/p2p';
 import * as store from '../local/localDb';
 
-const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || window.location.origin;
 const LOCAL_MODE = process.env.REACT_APP_LOCAL_MODE === 'true';
 
 /**
@@ -28,7 +26,7 @@ const LOCAL_MODE = process.env.REACT_APP_LOCAL_MODE === 'true';
  * @param {string} token  - JWT auth token
  */
 export function useGameSocket(gameId, token) {
-  const socketRef     = useRef(null);
+  const proactiveRef  = useRef({ lastAt: 0, suppress: {} });
   const syncRef       = useRef(null);
   const localStateRef = useRef(null);
 
@@ -61,6 +59,63 @@ export function useGameSocket(gameId, token) {
     setClockTime(snapshot.clockTime ?? null);
     if (localStateRef.current) localStateRef.current.replace(snapshot);
     else localStateRef.current = new LocalGameState(snapshot);
+  }, []);
+
+  // ─── Proactive Line Coach (local heuristic) ───────────────────────────────
+  // Surfaces at most one equity-balancing sub suggestion every 45s while the
+  // clock runs — a free, offline nudge. AI is deliberately NOT called on this
+  // loop (that would incur per-cycle API cost); the on-demand Line Coach is
+  // where AI runs. Acked/dismissed suggestions are suppressed for 2 minutes.
+  const maybeGenerateProactivePush = useCallback((summary, flags) => {
+    const st = localStateRef.current?.getState();
+    if (!st || !st.clockRunning) return;
+    const now = Date.now();
+    const P = proactiveRef.current;
+    if (now - P.lastAt < 45000) return;
+
+    const onField = new Set(Object.values(st.fieldPositions || {}).filter(Boolean));
+    const bench = st.bench || [];
+
+    // playerIn: the most under-target athlete currently on the bench.
+    const under = (flags || [])
+      .filter(f => f.status === 'UNDER_TARGET' && bench.includes(f.athleteId))
+      .sort((a, b) => (b.minutesUnder || 0) - (a.minutesUnder || 0))[0];
+    if (!under) return;
+
+    // playerOut: an over-target athlete on the field, else the field player
+    // (never the goalie) with the most minutes.
+    let outId = (flags || [])
+      .filter(f => f.status === 'OVER_TARGET' && onField.has(f.athleteId))
+      .sort((a, b) => (b.minutesOver || 0) - (a.minutesOver || 0))[0]?.athleteId;
+    if (!outId) {
+      const goalieId = st.fieldPositions?.goalie;
+      outId = (summary || [])
+        .filter(s => onField.has(s.athleteId) && s.athleteId !== goalieId)
+        .sort((a, b) => (b.totalSeconds || 0) - (a.totalSeconds || 0))[0]?.athleteId;
+    }
+    if (!outId || outId === under.athleteId) return;
+
+    const slot = Object.entries(st.fieldPositions || {}).find(([, id]) => id === outId);
+    const position = slot?.[0];
+    if (!position || position === 'goalie') return; // never auto-pull the goalie
+
+    const key = `${under.athleteId}->${outId}`;
+    if (P.suppress[key] && P.suppress[key] > now) return;
+
+    P.lastAt = now;
+    setProactivePush({
+      pushId: `local:${key}:${now}`,
+      pushedAt: now,
+      reason: 'timer',
+      suggestion: {
+        type: 'SUBSTITUTION',
+        urgency: under.urgency === 'HIGH' ? 'high' : 'medium',
+        playerIn: under.athleteId,
+        playerOut: outId,
+        position,
+        message: `Balance minutes${under.minutesUnder ? ` — ${under.minutesUnder}m under target` : ''}`,
+      },
+    });
   }, []);
 
   // ─── Nearby: host broadcasts authoritative state; guest applies it ─────────
@@ -207,98 +262,17 @@ export function useGameSocket(gameId, token) {
       const ptTimer = setInterval(async () => {
         try {
           const { data } = await apiClient.get(`/game-live/${gameId}/playtime`);
-          if (Array.isArray(data?.summary)) setPlaytime(data.summary);
+          if (Array.isArray(data?.summary))     setPlaytime(data.summary);
           if (Array.isArray(data?.equityFlags)) setEquityFlags(data.equityFlags);
+          maybeGenerateProactivePush(data?.summary || [], data?.equityFlags || []);
         } catch { /* ignore */ }
       }, 5000);
       return () => { clearInterval(clockTimer); clearInterval(ptTimer); setConnected(false); };
     }
-
-    const socket = io(`${SOCKET_URL}/game`, {
-      auth: { token },
-      transports: ['websocket', 'polling'],
-    });
-    socketRef.current = socket;
-
-    socket.on('connect', () => {
-      setConnected(true);
-      socket.emit('join_game', { gameId });
-    });
-    socket.on('disconnect', () => setConnected(false));
-
-    socket.on('state_update', ({ state }) => {
-      if (state) applySnapshot(state);
-    });
-
-    socket.on('clock_tick', ({ clockTime: t }) => {
-      setClockTime(t);
-      if (localStateRef.current) {
-        // Keep local state in sync so a late-arriving offline window picks up
-        // the correct clock baseline.
-        const s = localStateRef.current.getState();
-        s.clockTime = t;
-        localStateRef.current.replace(s);
-      }
-    });
-
-    socket.on('playtime_tick', ({ summary, equityFlags: flags }) => {
-      if (Array.isArray(summary)) setPlaytime(summary);
-      if (Array.isArray(flags))   setEquityFlags(flags);
-    });
-
-    socket.on('opponent_threats', ({ threats: list }) => {
-      if (Array.isArray(list)) setThreats(list);
-    });
-
-    socket.on('score_update', ({ state }) => {
-      if (state) {
-        setLiveState(prev => prev ? { ...prev, homeScore: state.homeScore, awayScore: state.awayScore } : state);
-        if (localStateRef.current) {
-          localStateRef.current.updateScore('home', state.homeScore);
-          localStateRef.current.updateScore('away', state.awayScore);
-        }
-      }
-    });
-
-    socket.on('substitution', ({ state }) => {
-      if (state) {
-        applySnapshot(state);
-        setEvents(prev => [{ type: 'substitution', ts: Date.now() }, ...prev]);
-      }
-    });
-
-    socket.on('game_event', (event) => {
-      setEvents(prev => [{ ...event, ts: Date.now() }, ...prev]);
-    });
-
-    socket.on('queue_update', ({ subQueue, mergeAlerts: alerts }) => {
-      setLiveState(prev => prev ? { ...prev, subQueue: subQueue || [] } : prev);
-      if (alerts?.length > 0) setMergeAlerts(alerts);
-    });
-
-    socket.on('batch_substitution', ({ state }) => {
-      if (state) {
-        applySnapshot(state);
-        setMergeAlerts([]);
-      }
-    });
-
-    // Proactive Line Coach push. Server picks at most one suggestion per
-    // evaluation cycle (see services/ai/proactiveCoach.js) and emits the
-    // full push row plus the rec payload. Replace-with-newest: we only
-    // hold one on screen at a time; later pushes overwrite.
-    socket.on('ai:recommendation', (push) => {
-      if (!push || !push.pushId) return;
-      setProactivePush(push);
-    });
-
-    return () => {
-      socket.emit('leave_game', { gameId });
-      socket.disconnect();
-      socketRef.current = null;
-      setConnected(false);
-    };
-  }, [gameId, token, applySnapshot]);
+    // Standalone build: no server socket path. (Server mode was excised — the
+    // live game is driven entirely by the on-device engine above.)
+    return undefined;
+  }, [gameId, token, applySnapshot, maybeGenerateProactivePush]);
 
   // ─── Helper: route a mutation through sync + local optimistic apply ───────
   const send = useCallback(async (method, path, body, localApply) => {
@@ -374,12 +348,21 @@ export function useGameSocket(gameId, token) {
 
   // ─── Sub queue ────────────────────────────────────────────────────────────
   const addToQueue = useCallback(async (params) => {
-    const result = await send(
-      'POST', `/game-live/${gameId}/sub-queue/add`, params,
-      (local) => local.addToQueue(params.entry || params)
-    );
-    if (result?.response?.mergeAlerts?.length > 0) {
-      setMergeAlerts(result.response.mergeAlerts);
+    // No optimistic apply: the authoritative entry (with its resolved `moves`)
+    // is built by the backend. Pushing the raw request locally would inject a
+    // moves-less entry and crash the queue renderer mid-game.
+    const result = await send('POST', `/game-live/${gameId}/sub-queue/add`, params);
+    const resp = result?.response;
+    if (resp?.subQueue) {
+      setLiveState(prev => (prev ? { ...prev, subQueue: resp.subQueue } : prev));
+      if (localStateRef.current) {
+        const s = localStateRef.current.getState();
+        s.subQueue = resp.subQueue;
+        localStateRef.current.replace(s);
+      }
+    }
+    if (resp?.mergeAlerts?.length > 0) {
+      setMergeAlerts(resp.mergeAlerts);
     }
     return result;
   }, [gameId, send]);
@@ -417,6 +400,10 @@ export function useGameSocket(gameId, token) {
   const acknowledgePush = useCallback(async (pushId) => {
     if (!pushId) return null;
     setProactivePush(prev => (prev && prev.pushId === pushId ? null : prev));
+    // Locally-generated push: suppress this suggestion for 2 min so it doesn't
+    // immediately re-fire after the coach acts on it.
+    const m = /^local:([^:]+):/.exec(pushId);
+    if (m) proactiveRef.current.suppress[m[1]] = Date.now() + 120000;
     try {
       const res = await apiClient.post(`/ai-coach/proactive/${pushId}/ack`);
       return res.data;
@@ -430,6 +417,8 @@ export function useGameSocket(gameId, token) {
   const dismissPush = useCallback(async (pushId) => {
     if (!pushId) return null;
     setProactivePush(prev => (prev && prev.pushId === pushId ? null : prev));
+    const m = /^local:([^:]+):/.exec(pushId);
+    if (m) proactiveRef.current.suppress[m[1]] = Date.now() + 120000;
     try {
       const res = await apiClient.post(`/ai-coach/proactive/${pushId}/dismiss`);
       return res.data;

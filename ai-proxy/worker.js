@@ -47,6 +47,7 @@ export default {
     try {
       if (url.pathname === '/recommend') return json(await recommend(body, env));
       if (url.pathname === '/position') return json(await position(body, env));
+      if (url.pathname === '/recap') return json(await recap(body, env));
       return json({ error: 'Not found' }, 404);
     } catch (e) {
       return json({ error: e.message || 'Proxy error' }, 502);
@@ -155,5 +156,18 @@ async function position(body, env) {
     `Engine best fit: ${eng?.recommendations?.primary?.position} (${eng?.recommendations?.primary?.fitScore}).`,
   ].join('\n');
   const { text } = await callClaude(env, { system, user, maxTokens: 300 });
+  return { text };
+}
+
+async function recap(body, env) {
+  const r = body.recap || {};
+  const system = 'You are a lacrosse coach writing a short, upbeat 2-3 sentence game recap for the team and parents. Plain text, no preamble, no markdown.';
+  const performers = (r.topPerformers || []).map((t) => `${t.name} ${t.goals}G ${t.assists}A`).join('; ');
+  const user = [
+    `Result: ${r.headline} (${r.result || ''}).`,
+    performers ? `Top performers: ${performers}.` : '',
+    r.goalie ? `Goalie: ${r.goalie.name} ${r.goalie.saves} saves.` : '',
+  ].filter(Boolean).join(' ');
+  const { text } = await callClaude(env, { system, user, maxTokens: 250 });
   return { text };
 }

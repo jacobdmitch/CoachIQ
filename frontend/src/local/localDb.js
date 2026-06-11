@@ -11,6 +11,7 @@
  */
 
 import { seedDatabase } from './seed';
+import { captureException } from '../services/sentry';
 
 const DB_NAME = 'coachiq_local';
 const DB_VERSION = 1;
@@ -46,6 +47,22 @@ let cache = null;
 let dbPromise = null;
 let readyPromise = null;
 let saveTimer = null;
+
+// Persistence health: true when writes keep failing after retries. The UI
+// subscribes so it can warn the coach before an app-kill loses data.
+let persistFailing = false;
+const persistListeners = new Set();
+function notifyPersist() {
+  persistListeners.forEach((cb) => { try { cb(persistFailing); } catch { /* ignore */ } });
+}
+export function subscribePersistence(cb) {
+  persistListeners.add(cb);
+  cb(persistFailing);
+  return () => persistListeners.delete(cb);
+}
+export function isPersistFailing() {
+  return persistFailing;
+}
 
 // ─── uuid ─────────────────────────────────────────────────────────────────────
 export function uuid() {
@@ -130,8 +147,35 @@ function scheduleSave() {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    persistNow().catch(() => {});
+    flushWithRetry(0);
   }, 150);
+}
+
+/** Public: trigger a (debounced) save that participates in retry + health. */
+export function save() {
+  scheduleSave();
+}
+
+// Write the document, retrying with backoff. After repeated failures we flag
+// persistence-failing (the UI shows a banner) but keep retrying slowly so a
+// transient cause (quota, WebKit eviction, disk pressure) can recover by itself.
+async function flushWithRetry(attempt) {
+  try {
+    await persistNow();
+    if (persistFailing) { persistFailing = false; notifyPersist(); }
+  } catch (e) {
+    if (attempt < 5) {
+      const delay = Math.min(1000 * 2 ** attempt, 15000);
+      setTimeout(() => flushWithRetry(attempt + 1), delay);
+    } else {
+      if (!persistFailing) {
+        persistFailing = true;
+        notifyPersist();
+        try { captureException(e, { extra: { where: 'localDb.flushWithRetry' } }); } catch { /* ignore */ }
+      }
+      setTimeout(() => flushWithRetry(5), 15000); // keep trying slowly
+    }
+  }
 }
 
 export function persistNow() {

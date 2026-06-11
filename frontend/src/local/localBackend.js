@@ -14,7 +14,7 @@ import { resolveSituation } from './engine/situationResolver';
 import { suggestLine, listLineRoles } from './engine/lineBuilder';
 import positionsKB from './knowledge/positions.json';
 import drillsKB from './knowledge/drills.json';
-import { aiRecommend, aiPositionAnalysis } from './aiClient';
+import { aiRecommend, aiPositionAnalysis, aiRecap } from './aiClient';
 
 const { uuid, nowISO } = store;
 
@@ -112,8 +112,15 @@ function rosterForTeam(teamId) {
 function persistLive(gameId) {
   const L = live.get(gameId);
   if (!L) return;
+  // Bank elapsed seconds for on-field players so totalSeconds is current at
+  // persist time (the recovery clamp re-stamps `since` on reload).
+  if (L.gsm.clockRunning) ptBankRunning(L, Date.now());
+  // Persist the LIVE clock value (liveState computes it from the running
+  // anchor) rather than gsm.getState().clockTime, which is only refreshed on
+  // stop. Otherwise a crash/reload would rebuild the clock from a stale value
+  // and appear to reset the game timer.
   store.setKey('live_games', gameId, {
-    snapshot: L.gsm.getState(),
+    snapshot: liveState(L),
     playtime: L.playtime,
     seq: L.seq,
   });
@@ -144,6 +151,16 @@ function getLive(gameId, { create } = {}) {
     fail(404, 'Game not in progress');
   }
   const L = { gsm, playtime: persisted?.playtime || {}, seq: persisted?.seq || 0 };
+  // Recovery clamp: if the app was killed while the clock ran, re-anchor each
+  // on-field player's `since` to now. The clock re-anchors from the persisted
+  // value (excluding the dead window); without this, on-field players would be
+  // credited the entire jetsam gap as played minutes.
+  if (persisted?.snapshot?.clockRunning) {
+    const nowTs = Date.now();
+    for (const id of Object.keys(L.playtime)) {
+      if (L.playtime[id]?.onField) L.playtime[id].since = nowTs;
+    }
+  }
   live.set(gameId, L);
   return L;
 }
@@ -166,6 +183,17 @@ function ptBank(L, athleteId, now) {
   const p = ptEnsure(L, athleteId);
   if (p.onField && p.since) p.totalSeconds += Math.max(0, Math.floor((now - p.since) / 1000));
   p.since = now;
+}
+// Bank elapsed seconds for every on-field player without taking them off the
+// field. Called before persisting so totalSeconds is always current on disk.
+function ptBankRunning(L, now) {
+  for (const id of Object.keys(L.playtime)) {
+    const p = L.playtime[id];
+    if (p.onField && p.since) {
+      p.totalSeconds += Math.max(0, Math.floor((now - p.since) / 1000));
+      p.since = now;
+    }
+  }
 }
 function ptFieldIds(L) {
   return Object.entries(L.gsm.fieldPositions).filter(([, id]) => id).map(([, id]) => id);
@@ -256,7 +284,7 @@ on('PATCH', '/auth/profile', ({ body }) => {
     firstName: body.firstName ?? store.db().coach.firstName,
     lastName: body.lastName ?? store.db().coach.lastName,
   });
-  store.persistNow();
+  store.save();
   return { success: true, coach: store.db().coach };
 });
 on('POST', '/auth/change-password', () => ({ success: true }));
@@ -462,6 +490,14 @@ on('PATCH', '/games/:id', ({ params, body }) => {
   for (const [k, col] of Object.entries(map)) if (body[k] !== undefined) patch[col] = body[k];
   const g = store.update('games', params.id, patch);
   if (!g) fail(404, 'Game not found');
+  // Keep an in-progress live game's engine in sync with score/status edits made
+  // through this REST path, so the 1s live poll doesn't overwrite them.
+  const L = live.get(params.id);
+  if (L) {
+    if (body.scoreHome !== undefined) L.gsm.homeScore = body.scoreHome;
+    if (body.scoreAway !== undefined) L.gsm.awayScore = body.scoreAway;
+    persistLive(params.id);
+  }
   return { success: true, game: { ...g, result: gameResult(g) } };
 });
 on('GET', '/games/:gameId/situation-assignments', ({ params }) => ({
@@ -524,7 +560,10 @@ on('POST', '/game-live/:gameId/period/next', ({ params }) => {
 on('POST', '/game-live/:gameId/sub', ({ params, body }) => {
   const L = getLive(params.gameId);
   const now = Date.now();
-  if (L.gsm.clockRunning && body.playerOut) ptBank(L, body.playerOut, now), (L.playtime[body.playerOut].onField = false);
+  if (L.gsm.clockRunning && body.playerOut) {
+    ptBank(L, body.playerOut, now);
+    if (L.playtime[body.playerOut]) L.playtime[body.playerOut].onField = false;
+  }
   const ev = L.gsm.executeSubstitution(body.playerIn, body.playerOut, body.position);
   if (ev.success === false) fail(400, ev.error);
   if (L.gsm.clockRunning && body.playerIn) { const p = ptEnsure(L, body.playerIn); p.onField = true; p.since = now; }
@@ -573,6 +612,9 @@ on('POST', '/game-live/:gameId/score', ({ params, body }) => {
 });
 on('GET', '/game-live/:gameId/state', ({ params }) => {
   const L = getLive(params.gameId);
+  // While the clock runs, refresh the persisted snapshot (the live poll hits
+  // this every second) so a crash/reload recovers the clock to within ~1s.
+  if (L.gsm.clockRunning) persistLive(params.gameId);
   return { success: true, state: liveState(L) };
 });
 on('GET', '/game-live/:gameId/playtime', ({ params }) => {
@@ -833,7 +875,7 @@ on('PUT', '/opposing/players/:id/film-stats', ({ params, body }) => {
   if (!row) { row = { opposing_player_id: params.id, games_observed: 0, goals: 0, assists: 0, shots: 0, shots_on_goal: 0, ground_balls: 0, turnovers: 0, caused_turnovers: 0, saves: 0, faceoff_wins: 0, faceoff_losses: 0, penalties: 0, notes: '', created_at: nowISO(), updated_at: nowISO() }; store.insert('opposing_player_film_stats', row); }
   for (const [k, col] of Object.entries(map)) if (body[k] !== undefined) row[col] = body[k];
   row.updated_at = nowISO();
-  store.persistNow();
+  store.save();
   return { success: true, filmStats: row };
 });
 on('GET', '/opposing/teams/:id/film-stats', ({ params }) => {
@@ -899,6 +941,15 @@ on('POST', '/ai-coach/position-fit/:athleteId', async ({ params, body }) => {
   try { claudeAnalysis = await aiPositionAnalysis({ athlete: a, engine }); } catch { /* optional */ }
   return { success: true, athleteId: a.id, athleteName: `${a.first_name} ${a.last_name}`, format: body?.format || 'standard', positionEngine: engine, claudeAnalysis, latencyMs: 0 };
 });
+on('POST', '/ai-coach/recap/:gameId', async ({ params }) => {
+  const recap = buildRecap(params.gameId);
+  // Upgrade the local template to an AI-written narrative when the proxy is set.
+  try {
+    const text = await aiRecap({ recap });
+    if (text) { recap.narrative = text; recap.ai = true; }
+  } catch { /* keep the local template */ }
+  return { success: true, recap };
+});
 on('GET', '/ai-coach/available-agents', () => ({ success: true, agents: [{ id: 'lineCoach', name: 'Line Coach', description: 'Substitution and playtime guidance', capabilities: ['substitutions', 'playtime', 'position-fit'], model: 'claude-haiku', status: 'active' }] }));
 on('GET', '/ai-coach/stats/:gameId', ({ params }) => ({ success: true, gameId: params.gameId, stats: { gameId: params.gameId, callCount: 0, totalTokens: 0, avgLatencyMs: 0, totalCostDollars: 0 } }));
 on('GET', '/ai-coach/conversation/:gameId', ({ params }) => ({ success: true, gameId: params.gameId, stats: { gameId: params.gameId, callCount: 0, totalTokens: 0, avgLatencyMs: 0, totalCostDollars: 0 }, callHistory: [] }));
@@ -956,6 +1007,37 @@ function positionFit(a, format) {
     },
     athleteStrengths: strengths.slice(0, 3).map((s) => s.k),
     developmentAreas: strengths.slice(-2).map((s) => s.k),
+  };
+}
+
+function buildRecap(gameId) {
+  const g = store.getById('games', gameId);
+  if (!g) fail(404, 'Game not found');
+  const byA = {};
+  store.find('game_events', (e) => e.game_id === gameId && e.team_side === 'home').forEach((e) => {
+    if (!e.athlete_id) return;
+    const stat = EVENT_TO_STAT[e.event_type];
+    if (!byA[e.athlete_id]) byA[e.athlete_id] = blankStats();
+    if (stat) byA[e.athlete_id][stat] += 1;
+  });
+  const minutes = {};
+  store.find('playtime_log', (p) => p.game_id === gameId).forEach((p) => { minutes[p.athlete_id] = Number(p.minutes_played || 0); });
+  const named = Object.entries(byA).map(([id, s]) => {
+    const a = store.getById('athletes', id);
+    return { id, name: a ? `${a.first_name} ${a.last_name}` : 'Player', jersey: a?.jersey_number, ...s, points: s.goals + s.assists, minutes: minutes[id] || 0 };
+  });
+  const topPerformers = named.filter((n) => n.points > 0).sort((a, b) => b.points - a.points).slice(0, 3);
+  const goalie = named.filter((n) => n.saves > 0).sort((a, b) => b.saves - a.saves)[0] || null;
+  const topGB = named.slice().sort((a, b) => b.ground_balls - a.ground_balls)[0];
+  const result = gameResult(g);
+  const resultWord = result === 'W' ? 'win' : result === 'L' ? 'loss' : result === 'T' ? 'tie' : 'game';
+  const lines = [`A ${g.score_home}–${g.score_away} ${resultWord} vs ${g.opponent}.`];
+  if (topPerformers.length) lines.push(`Led by ${topPerformers.map((t) => `${t.name} (${t.goals}G, ${t.assists}A)`).join(', ')}.`);
+  if (goalie) lines.push(`${goalie.name} turned away ${goalie.saves} shots in goal.`);
+  if (topGB && topGB.ground_balls > 0) lines.push(`${topGB.name} led the ground-ball battle with ${topGB.ground_balls}.`);
+  return {
+    gameId, result, headline: `${g.score_home}–${g.score_away} vs ${g.opponent}`,
+    topPerformers, goalie, narrative: lines.join(' '), ai: false,
   };
 }
 

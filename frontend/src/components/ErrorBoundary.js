@@ -33,6 +33,13 @@ export default class ErrorBoundary extends React.Component {
     window.location.reload();
   };
 
+  // Reset the boundary and re-render the tree WITHOUT a full reload, so an
+  // in-progress game (clock, scores, staged subs) stays intact in memory.
+  // Reload is the fallback only if the error immediately recurs.
+  handleRecover = () => {
+    this.setState({ error: null });
+  };
+
   render() {
     if (!this.state.error) return this.props.children;
 
@@ -60,26 +67,46 @@ export default class ErrorBoundary extends React.Component {
           Something broke
         </h1>
         <p style={{ fontSize: '14px', color: '#9CA3AF', maxWidth: '420px', marginBottom: '24px' }}>
-          CoachIQ hit an unexpected error. Reload to recover — your game state
-          is saved on the server.
+          CoachIQ hit an unexpected error. Tap "Try again" to recover without
+          interrupting your live game — it's saved on this device. Use Reload
+          only if that doesn't work.
         </p>
-        <button
-          onClick={this.handleReload}
-          style={{
-            padding: '10px 24px',
-            backgroundColor: '#C9A227',
-            color: '#0A1018',
-            border: 'none',
-            borderRadius: '6px',
-            fontWeight: 700,
-            letterSpacing: '1px',
-            textTransform: 'uppercase',
-            fontSize: '12px',
-            cursor: 'pointer',
-          }}
-        >
-          Reload
-        </button>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button
+            onClick={this.handleRecover}
+            style={{
+              padding: '10px 24px',
+              backgroundColor: '#C9A227',
+              color: '#0A1018',
+              border: 'none',
+              borderRadius: '6px',
+              fontWeight: 700,
+              letterSpacing: '1px',
+              textTransform: 'uppercase',
+              fontSize: '12px',
+              cursor: 'pointer',
+            }}
+          >
+            Try again
+          </button>
+          <button
+            onClick={this.handleReload}
+            style={{
+              padding: '10px 24px',
+              backgroundColor: 'transparent',
+              color: '#9CA3AF',
+              border: '1px solid #374151',
+              borderRadius: '6px',
+              fontWeight: 700,
+              letterSpacing: '1px',
+              textTransform: 'uppercase',
+              fontSize: '12px',
+              cursor: 'pointer',
+            }}
+          >
+            Reload
+          </button>
+        </div>
         {process.env.NODE_ENV !== 'production' && (
           <pre style={{
             marginTop: '24px',

@@ -11,9 +11,13 @@ export const LOCAL_MODE = process.env.REACT_APP_LOCAL_MODE === 'true';
 export async function bootstrapLocal() {
   if (!LOCAL_MODE) return;
   await store.ready();
-  if (!localStorage.getItem('token')) localStorage.setItem('token', 'local-token');
-  const team = store.all('teams')[0];
-  if (team && !localStorage.getItem('activeTeamId')) {
-    localStorage.setItem('activeTeamId', team.id);
-  }
+  // Guard localStorage: a thrown quota/privacy error here (before React mounts)
+  // would otherwise blank the app. Worst case we fall through to the login screen.
+  try {
+    if (!localStorage.getItem('token')) localStorage.setItem('token', 'local-token');
+    const team = store.all('teams')[0];
+    if (team && !localStorage.getItem('activeTeamId')) {
+      localStorage.setItem('activeTeamId', team.id);
+    }
+  } catch { /* storage unavailable */ }
 }

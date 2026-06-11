@@ -5,6 +5,7 @@ import { ToastProvider } from './context/ToastContext';
 import AppShell from './components/layout/AppShell.js';
 import LoginPage from './components/auth/LoginPage.js';
 import SignupPage from './components/auth/SignupPage.js';
+import PersistenceBanner from './components/common/PersistenceBanner.js';
 
 // Lazy-load page-level components to keep initial bundle small
 const SeasonDashboard  = lazy(() => import('./components/dashboard/SeasonDashboard.js'));
@@ -73,6 +74,7 @@ export default function App() {
   return (
     <AuthProvider>
       <ToastProvider>
+      <PersistenceBanner />
       <Router>
         <Suspense fallback={<PageLoader />}>
           <Routes>

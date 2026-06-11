@@ -178,7 +178,7 @@ export class LocalGameState {
   executeBatchSub() {
     if (!this.state.subQueue || this.state.subQueue.length === 0) return false;
     for (const entry of this.state.subQueue) {
-      for (const move of entry.moves) {
+      for (const move of (entry.moves || [])) {
         // Clear playerOut's slot
         for (const [slot, id] of Object.entries(this.state.fieldPositions)) {
           if (id === move.playerOut) this.state.fieldPositions[slot] = null;

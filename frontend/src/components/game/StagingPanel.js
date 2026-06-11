@@ -183,7 +183,7 @@ function QueueEntry({ entry, athletes, onRemoveEntry, onRemoveMove }) {
           )}
         </span>
         <span style={{ fontFamily: 'var(--font-body)', fontWeight: 300, fontSize: 10, color: 'var(--color-text-muted)' }}>
-          {entry.moves.length} sub{entry.moves.length !== 1 ? 's' : ''} {expanded ? '▲' : '▼'}
+          {(entry.moves?.length || 0)} sub{(entry.moves?.length || 0) !== 1 ? 's' : ''} {expanded ? '▲' : '▼'}
         </span>
         <button
           onClick={e => { e.stopPropagation(); onRemoveEntry(entry.queueId); }}
@@ -209,7 +209,7 @@ function QueueEntry({ entry, athletes, onRemoveEntry, onRemoveMove }) {
       )}
 
       {/* Move rows */}
-      {expanded && entry.moves.map(move => (
+      {expanded && (entry.moves || []).map(move => (
         <div key={move.moveId} style={{
           display: 'flex', alignItems: 'center', gap: 'var(--sp-2)',
           padding: 'var(--sp-2) var(--sp-3)',
@@ -284,7 +284,7 @@ export default function StagingPanel({
   }
 
   const subQueue = liveState?.subQueue || [];
-  const totalMoves = subQueue.reduce((n, e) => n + e.moves.length, 0);
+  const totalMoves = subQueue.reduce((n, e) => n + (e.moves?.length || 0), 0);
 
   const situationOptions = gameFormat === '6s' ? SITUATION_OPTIONS_6S : SITUATION_OPTIONS;
 
