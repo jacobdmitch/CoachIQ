@@ -1,0 +1,2 @@
+repo,primary_language,total_loc,code_files,merged_prs,commits,contributors,avg_loc_per_pr,median_loc_per_pr,pct_simple_prs,pct_standard_prs,pct_rich_prs,pct_prs_with_issue_ref,functions_est,classes_est,test_to_code_ratio_pct,pct_untested_files,comment_ratio_pct,license,first_commit,last_commit,sample_files
+CoachIQ,JavaScript,35107,157,5,46,3,1550.6,1252,0.0,20.0,80.0,100.0,620,15,12.8,91.2,4.0,none-found,2026-04-14,2026-06-10,frontend/src/local/localDb.js; services/emailService.js; frontend/src/services/offlineQueue.js

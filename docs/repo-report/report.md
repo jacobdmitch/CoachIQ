@@ -1,12 +1,12 @@
 # Repository report — CoachIQ
 
-*Prepared 2026-08-12. Metrics mined locally from the git checkout.*
+*Generated 2026-08-13 from the local git checkout.*
 
 ## Highlights
 
 - 35,107 lines across 157 code files. Primary language JavaScript. Mix: JavaScript 99%, Swift 1%, Shell 0%, TypeScript 0%.
-- 47 commits by 3 contributors, 2026-04-14 to 2026-08-12.
-- 47 commits in the last 12 months (freshness / activity signal).
+- 46 commits by 3 contributors, 2026-04-14 to 2026-06-10.
+- 46 commits in the last 12 months (freshness / activity signal).
 - 5 merged PRs; sampled mix 0.0% simple / 20.0% standard / 80.0% rich.
 - 100.0% of sampled PRs reference an issue in the commit body.
 - Test-to-code ratio 12.8% (21 test files); ~91.2% of source files have no matching test.
@@ -20,17 +20,16 @@
 |---|---|
 | Primary language | JavaScript |
 | Total LoC | 35,107 across 157 code files |
-| Merged PRs / Commits | 5 / 47 |
+| Merged PRs / Commits | 5 / 46 |
 | PR mix (Simple/Standard/Rich) | 0.0% / 20.0% / 80.0% |
 | Avg / median LoC per PR | 1,551 / 1,252 |
 | % PRs referencing an issue | 100.0% |
 | Test-to-code / % untested files | 12.8% / 91.2% |
 | Functions / Classes (est.) | 620 / 15 |
 | Contributors | 3 |
-| History | 2026-04-14 → 2026-08-12 |
+| History | 2026-04-14 → 2026-06-10 |
 | License | none-found |
 
-*Seller to complete:* Category, company timeline, headcount, **Quality of SWE** (engineer pedigree — years of experience, domain specialty, notable-company alumni; aggregate, no names).
 
 ## Representative code
 
@@ -385,4 +384,4 @@ diff --git a/services/agents/lineCoachAgent.js b/services/agents/lineCoachAgent.
 
 **Action required.** Secret-pattern hits: password assign ×8; PII-keyword files: 0. Remove from the working tree AND git history, and rotate any live key before transfer.
 
-*This report contains real code excerpts and diff hunks (secret values redacted). % Rich PRs is a lower bound — review threads live on the code host, not in git. Function/class counts are regex estimates.*
+*Contains real code excerpts and diff hunks (secret-shaped values redacted). % Rich PRs is a lower bound — review threads live on the code host, not in git. Function and class counts are regex estimates.*

@@ -1,12 +1,12 @@
 {
   "repo_name": "CoachIQ",
-  "generated_at": "2026-08-12T23:06:19Z",
-  "note": "Seller-side report. Metrics + highlights + code excerpts + sample PRs for a buyer to evaluate. This tool does not price or grade the repo. NOTE: this report CONTAINS REAL CODE (excerpts and diff hunks) with secret-looking values redacted. Review before sending, or re-run with --no-excerpts for a metrics-only report.",
+  "generated_at": "2026-08-13T00:15:55Z",
+  "note": "Metrics, highlights, code excerpts and sample PRs. CONTAINS REAL CODE (excerpts and diff hunks) with secret-shaped values redacted \u2014 review before sharing, or re-run with --no-excerpts for a metrics-only report.",
   "contains_code": true,
   "highlights": [
     "35,107 lines across 157 code files. Primary language JavaScript. Mix: JavaScript 99%, Swift 1%, Shell 0%, TypeScript 0%.",
-    "47 commits by 3 contributors, 2026-04-14 to 2026-08-12.",
-    "47 commits in the last 12 months (freshness / activity signal).",
+    "46 commits by 3 contributors, 2026-04-14 to 2026-06-10.",
+    "46 commits in the last 12 months (freshness / activity signal).",
     "5 merged PRs; sampled mix 0.0% simple / 20.0% standard / 80.0% rich.",
     "100.0% of sampled PRs reference an issue in the commit body.",
     "Test-to-code ratio 12.8% (21 test files); ~91.2% of source files have no matching test.",
@@ -40,11 +40,11 @@
     "files_with_pii_keywords": 0
   },
   "history": {
-    "commits": 47,
+    "commits": 46,
     "contributors": 3,
     "first_commit": "2026-04-14",
-    "last_commit": "2026-08-12",
-    "commits_last_365d": 47,
+    "last_commit": "2026-06-10",
+    "commits_last_365d": 46,
     "merged_prs_est": 5,
     "pr_sample_analyzed": 5,
     "avg_loc_per_pr": 1550.6,
@@ -109,6 +109,28 @@
       "classes_est": 0
     }
   ],
+  "timeline_monthly": {
+    "months": [
+      "2026-04",
+      "2026-05",
+      "2026-06"
+    ],
+    "commits": [
+      44,
+      0,
+      2
+    ],
+    "authors": [
+      3,
+      0,
+      1
+    ],
+    "merges": [
+      5,
+      0,
+      0
+    ]
+  },
   "code_excerpts": [
     {
       "path": "frontend/src/local/localDb.js",
@@ -215,5 +237,21 @@
     },
     "files_with_pii_keywords": 0,
     "action": "Remove secrets and any customer PII from the working tree AND git history before sharing."
+  },
+  "deliverable": {
+    "pdf_engine": null,
+    "zip": "CoachIQ-report.zip",
+    "contents": [
+      "report.html",
+      "report.md",
+      "metrics.xlsx",
+      "metrics.csv",
+      "repo_report.json",
+      "chart-activity.svg",
+      "chart-composition.svg",
+      "chart-contributors.svg",
+      "chart-languages.svg",
+      "chart-pr_tiers.svg"
+    ]
   }
 }

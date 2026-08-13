@@ -1,2 +1,0 @@
-Sub-Company/Project Name,Category,Primary Coding Language,Total LoC,# of Repos,# of PRs,# of Merged PRs,Avg LoC per PR,% Simple PRs,% Standard PRs,% Rich PRs,# of Commits,# of Functions,# of Classes,% Test-to-Code Ratio,% Untested Files,Comment Ratio,# of Contributors,Sample code,References
-CoachIQ,,JavaScript,35107,1,5,5,1550.6,0.0,20.0,80.0,47,620,15,12.8,91.2,4.0,3,frontend/src/local/localDb.js; services/emailService.js; frontend/src/services/offlineQueue.js,
