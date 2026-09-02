@@ -1,0 +1,257 @@
+{
+  "repo_name": "CoachIQ",
+  "generated_at": "2026-08-13T00:15:55Z",
+  "note": "Metrics, highlights, code excerpts and sample PRs. CONTAINS REAL CODE (excerpts and diff hunks) with secret-shaped values redacted \u2014 review before sharing, or re-run with --no-excerpts for a metrics-only report.",
+  "contains_code": true,
+  "highlights": [
+    "35,107 lines across 157 code files. Primary language JavaScript. Mix: JavaScript 99%, Swift 1%, Shell 0%, TypeScript 0%.",
+    "46 commits by 3 contributors, 2026-04-14 to 2026-06-10.",
+    "46 commits in the last 12 months (freshness / activity signal).",
+    "5 merged PRs; sampled mix 0.0% simple / 20.0% standard / 80.0% rich.",
+    "100.0% of sampled PRs reference an issue in the commit body.",
+    "Test-to-code ratio 12.8% (21 test files); ~91.2% of source files have no matching test.",
+    "Build: CI configured (.github/workflows); dependency lockfiles present.",
+    "License: none-found.",
+    "~620 functions and ~15 classes/types (regex estimate)."
+  ],
+  "files": {
+    "files": 157,
+    "test_files": 21,
+    "total_loc": 35107,
+    "code_loc": 30465,
+    "comment_loc": 1253,
+    "blank_loc": 3389,
+    "comment_ratio_pct": 4.0,
+    "test_loc": 3996,
+    "test_to_code_ratio_pct": 12.8,
+    "pct_untested_files_heuristic": 91.2,
+    "functions_est": 620,
+    "classes_est": 15,
+    "languages_by_loc": {
+      "JavaScript": 34755,
+      "Swift": 254,
+      "Shell": 79,
+      "TypeScript": 19
+    },
+    "primary_language": "JavaScript",
+    "secret_pattern_hits": {
+      "password_assign": 8
+    },
+    "files_with_pii_keywords": 0
+  },
+  "history": {
+    "commits": 46,
+    "contributors": 3,
+    "first_commit": "2026-04-14",
+    "last_commit": "2026-06-10",
+    "commits_last_365d": 46,
+    "merged_prs_est": 5,
+    "pr_sample_analyzed": 5,
+    "avg_loc_per_pr": 1550.6,
+    "median_loc_per_pr": 1252,
+    "pct_simple_prs": 0.0,
+    "pct_standard_prs": 20.0,
+    "pct_rich_prs": 80.0,
+    "pct_prs_with_issue_ref": 100.0
+  },
+  "environment": {
+    "ci_configs": [
+      ".github/workflows"
+    ],
+    "reproducibility_files": [],
+    "lockfiles": [
+      "package-lock.json"
+    ],
+    "repo_license": "none-found",
+    "copyleft_mentions_in_manifests": 0
+  },
+  "representative_sample_candidates": [
+    {
+      "path": "frontend/src/local/localDb.js",
+      "language": "JavaScript",
+      "loc": 263,
+      "functions_est": 32,
+      "classes_est": 0
+    },
+    {
+      "path": "services/emailService.js",
+      "language": "JavaScript",
+      "loc": 361,
+      "functions_est": 16,
+      "classes_est": 0
+    },
+    {
+      "path": "frontend/src/services/offlineQueue.js",
+      "language": "JavaScript",
+      "loc": 131,
+      "functions_est": 16,
+      "classes_est": 0
+    },
+    {
+      "path": "frontend/src/components/layout/TabletNav.js",
+      "language": "JavaScript",
+      "loc": 379,
+      "functions_est": 14,
+      "classes_est": 0
+    },
+    {
+      "path": "frontend/src/components/game/ScoutingTab.js",
+      "language": "JavaScript",
+      "loc": 438,
+      "functions_est": 12,
+      "classes_est": 0
+    },
+    {
+      "path": "services/ai/proactiveCoach.js",
+      "language": "JavaScript",
+      "loc": 349,
+      "functions_est": 10,
+      "classes_est": 0
+    }
+  ],
+  "timeline_monthly": {
+    "months": [
+      "2026-04",
+      "2026-05",
+      "2026-06"
+    ],
+    "commits": [
+      44,
+      0,
+      2
+    ],
+    "authors": [
+      3,
+      0,
+      1
+    ],
+    "merges": [
+      5,
+      0,
+      0
+    ]
+  },
+  "code_excerpts": [
+    {
+      "path": "frontend/src/local/localDb.js",
+      "language": "JavaScript",
+      "starts_at_line": 155,
+      "lines_shown": 40,
+      "file_loc": 263,
+      "secrets_redacted": 0,
+      "excerpt": "export function save() {\n  scheduleSave();\n}\n\n// Write the document, retrying with backoff. After repeated failures we flag\n// persistence-failing (the UI shows a banner) but keep retrying slowly so a\n// transient cause (quota, WebKit eviction, disk pressure) can recover by itself.\nasync function flushWithRetry(attempt) {\n  try {\n    await persistNow();\n    if (persistFailing) { persistFailing = false; notifyPersist(); }\n  } catch (e) {\n    if (attempt < 5) {\n      const delay = Math.min(1000 * 2 ** attempt, 15000);\n      setTimeout(() => flushWithRetry(attempt + 1), delay);\n    } else {\n      if (!persistFailing) {\n        persistFailing = true;\n        notifyPersist();\n        try { captureException(e, { extra: { where: 'localDb.flushWithRetry' } }); } catch { /* ignore */ }\n      }\n      setTimeout(() => flushWithRetry(5), 15000); // keep trying slowly\n    }\n  }\n}\n\nexport function persistNow() {\n  if (!cache) return Promise.resolve();\n  // Structured clone via JSON keeps the persisted copy detached from the mirror.\n  return writeDoc(JSON.parse(JSON.stringify(cache)));\n}\n\n// \u2500\u2500\u2500 Collection helpers (operate on the in-memory mirror) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\nexport function db() {\n  if (!cache) throw new Error('localDb not ready \u2014 await ready() first');\n  return cache;\n}\n\nexport function all(collection) {\n  return db()[collection] || [];"
+    },
+    {
+      "path": "services/emailService.js",
+      "language": "JavaScript",
+      "starts_at_line": 88,
+      "lines_shown": 40,
+      "file_loc": 361,
+      "secrets_redacted": 0,
+      "excerpt": "function fallbackNarrative(game, teamName, totals) {\n  const home = Number(game.score_home);\n  const away = Number(game.score_away);\n  let outcome = `${teamName} played ${game.opponent}`;\n  if (Number.isFinite(home) && Number.isFinite(away)) {\n    if (home > away)       outcome = `${teamName} defeated ${game.opponent} ${home}\u2013${away}`;\n    else if (home < away)  outcome = `${teamName} fell to ${game.opponent} ${home}\u2013${away}`;\n    else                   outcome = `${teamName} tied ${game.opponent} ${home}\u2013${away}`;\n  }\n  const fo = totals.faceoff_wins + totals.faceoff_losses;\n  const foPart = fo > 0 ? `, ${totals.faceoff_wins}\u2013${totals.faceoff_losses} at the X` : '';\n  return `${outcome}. The team recorded ${totals.goals} goal${totals.goals === 1 ? '' : 's'} ` +\n         `on ${totals.shots} shot${totals.shots === 1 ? '' : 's'}, ${totals.ground_balls} ground ball${totals.ground_balls === 1 ? '' : 's'}${foPart}.`;\n}\n\n/**\n * Ask Claude for a short game narrative (2\u20133 sentences). Returns a string on\n * success, or null if the API is unavailable. Never throws \u2014 the caller is\n * expected to fall back.\n */\nasync function generateNarrative(game, teamName, totals) {\n  const client = await getAnthropic();\n  if (!client) return null;\n  try {\n    const prompt = [\n      `Team: ${teamName}`,\n      `Opponent: ${game.opponent}`,\n      `Final score: ${teamName} ${game.score_home ?? '?'} \u2013 ${game.opponent} ${game.score_away ?? '?'}`,\n      `Team totals \u2014 goals: ${totals.goals}, assists: ${totals.assists}, shots: ${totals.shots}, ` +\n        `ground balls: ${totals.ground_balls}, saves: ${totals.saves}, turnovers: ${totals.turnovers}, ` +\n        `faceoffs: ${totals.faceoff_wins}\u2013${totals.faceoff_losses}`,\n      '',\n      'Write a 2\u20133 sentence recap of this lacrosse game. Mention the outcome and one or two notable team stats. ' +\n      'Plain prose, no bullet points, no markdown, no headings. Do not invent player names or events not supported by the stats above.',\n    ].join('\\n');\n\n    const response = await client.messages.create({\n      model: 'claude-haiku-4-5-20251001',\n      max_tokens: 256,\n      messages: [{ role: 'user', content: prompt }],"
+    },
+    {
+      "path": "frontend/src/services/offlineQueue.js",
+      "language": "JavaScript",
+      "starts_at_line": 84,
+      "lines_shown": 40,
+      "file_loc": 131,
+      "secrets_redacted": 0,
+      "excerpt": "export async function listPending(gameId) {\n  const db = await openDb();\n  return new Promise((resolve, reject) => {\n    const tx = db.transaction(STORE, 'readonly');\n    const store = tx.objectStore(STORE);\n    const results = [];\n    const cursorReq = store.openCursor();\n    cursorReq.onsuccess = () => {\n      const cursor = cursorReq.result;\n      if (!cursor) return resolve(results);\n      if (!gameId || cursor.value.gameId === gameId) results.push(cursor.value);\n      cursor.continue();\n    };\n    cursorReq.onerror = () => reject(cursorReq.error);\n  });\n}\n\n/**\n * Remove a pending op by id. Called after a successful replay.\n */\nexport async function removePending(id) {\n  const db = await openDb();\n  return new Promise((resolve, reject) => {\n    const tx = db.transaction(STORE, 'readwrite');\n    tx.objectStore(STORE).delete(id);\n    tx.oncomplete = () => resolve();\n    tx.onerror    = () => reject(tx.error);\n  });\n}\n\n/**\n * Count pending ops for a game (or all games if gameId omitted). Used by\n * the UI to show a \"N queued\" badge.\n */\nexport async function countPending(gameId) {\n  const ops = await listPending(gameId);\n  return ops.length;\n}\n\n/**"
+    }
+  ],
+  "sample_prs": [
+    {
+      "subject": "Merge pull request #3 from jacobdmitch/ai/architecture-v2-foundation",
+      "merged_at": "2026-04-19",
+      "files_changed": 8,
+      "additions": 1119,
+      "deletions": 2,
+      "touches_tests": true,
+      "references_issue": true,
+      "files": [
+        "frontend/src/components/ai/ProactivePushBanner.js",
+        "frontend/src/components/game/GameMode.js",
+        "frontend/src/hooks/useGameSocket.js",
+        "routes/ai-coach.js",
+        "routes/game-live.js",
+        "services/ai/proactiveCoach.js",
+        "services/lineCoachEngine.js",
+        "tests/services/proactive-coach.test.js"
+      ],
+      "sha": "07d4d5fb2c",
+      "diff_excerpt": "diff --git a/frontend/src/components/ai/ProactivePushBanner.js b/frontend/src/components/ai/ProactivePushBanner.js\n--- /dev/null\n+++ b/frontend/src/components/ai/ProactivePushBanner.js\n@@ -0,0 +1,173 @@\n+import React, { useEffect, useState } from 'react';\n+import Badge from '../common/Badge';\n+import Button from '../common/Button';\n+import './ProactivePushBanner.css';\n+\n+/**\n+ * ProactivePushBanner \u2014 top-anchored banner surface for proactive Line Coach\n+ * recommendations during a live game.\n+ *\n+ * Behavior:\n+ *   - Fixed to top of viewport, sitting above page content\n+ *   - Slides down from top on mount, up on unmount (via push key change)\n+ *   - Urgency-coded border + pill: high\u2192red, medium\u2192amber, low\u2192blue\n+ *   - Two large touch targets (Dismiss, Accept) meeting HIG 44pt min\n+ *   - Replace-with-newest: a new push while one is shown swaps body + key\n+ *     so the animation re-plays and the coach notices the change\n+ *\n+ * Props:\n+ *   push            - null when nothing to show, else { pushId, pushedAt,\n+ *                     reason, suggestion: { type, urgency, ...fields } }\n+ *   onAcknowledge(push) - called when coach taps Accept; full push is\n+ *                        forwarded so the parent can dispatch by type\n+ *                        (e.g., auto-execute a SUBSTITUTION).\n+ *   onDismiss(pushId)   - called when coach taps Dismiss\n+ *   resolveAthleteName  - optional (uuid) => string resolver; keeps the\n+ *                        banner dumb about roster lookups. Falls back to\n+ *                        the raw UUID when unavailable or not found.\n+ */\n+export default function ProactivePushBanner({\n+  push,\n+  onAcknowledge,\n+  onDismiss,\n+  resolveAthleteName,\n+}) {\n+  // `visible` drives the enter/exit animation. When `push` flips from null\n+  // to a value we mount the element and flag visible; when it flips back to\n+  // null we keep the element mounted briefly to play the exit transition,\n+  // then drop it from the DOM.\n+  const [visible, setVisible] = useState(false);\n+  const [current, setCurrent] = useState(null);\n+\n+  useEffect(() => {\n+    if (push) {\n+      setCurrent(push);\n+      // Next tick so the browser applies the initial off-screen transform\n+      // before we flip `visible` and trigger the transition.\n+      const id = requestAnimationFrame(() => setVisible(true));\n+      return () => cancelAnimationFrame(id);\n+    }\n+    setVisible(false);\n+    // Keep the old payload around through the 200ms exit transition so the\n+    // text doesn't vanish during the slide-up.\n+    const timeout = setTimeout(() => setCurrent(null), 220);\n+    return () => clearTimeout(timeout);\n+  }, [push]);\n+",
+      "diff_truncated": true,
+      "secrets_redacted": 0
+    },
+    {
+      "subject": "Merge pull request #5 from jacobdmitch/ai/architecture-v2-foundation",
+      "merged_at": "2026-04-19",
+      "files_changed": 17,
+      "additions": 1991,
+      "deletions": 19,
+      "touches_tests": true,
+      "references_issue": true,
+      "files": [
+        "frontend/src/App.js",
+        "frontend/src/components/ErrorBoundary.js",
+        "frontend/src/components/auth/LoginPage.js",
+        "frontend/src/components/auth/SignupPage.js",
+        "frontend/src/context/AuthContext.js",
+        "frontend/src/index.js",
+        "frontend/src/services/__tests__/syncClient.test.js",
+        "frontend/src/services/sentry.js"
+      ],
+      "sha": "e3386e94eb",
+      "diff_excerpt": "diff --git a/frontend/src/App.js b/frontend/src/App.js\n--- a/frontend/src/App.js\n+++ b/frontend/src/App.js\n@@ -5,4 +5,5 @@ import { ToastProvider } from './context/ToastContext';\n import AppShell from './components/layout/AppShell.js';\n import LoginPage from './components/auth/LoginPage.js';\n+import SignupPage from './components/auth/SignupPage.js';\n \n // Lazy-load page-level components to keep initial bundle small\n@@ -87,4 +88,14 @@ export default function App() {\n             />\n \n+            {/* Public: signup */}\n+            <Route\n+              path=\"/signup\"\n+              element={\n+                <PublicRoute>\n+                  <SignupPage />\n+                </PublicRoute>\n+              }\n+            />\n+\n             {/* Public: athlete share link (no auth) */}\n             <Route path=\"/share/player/:token\" element={<PlayerShareView />} />\ndiff --git a/frontend/src/components/ErrorBoundary.js b/frontend/src/components/ErrorBoundary.js\n--- /dev/null\n+++ b/frontend/src/components/ErrorBoundary.js\n@@ -0,0 +1,98 @@\n+import React from 'react';\n+import { captureException } from '../services/sentry';\n+\n+/**\n+ * ErrorBoundary \u2014 catches render-phase exceptions in the React tree and\n+ * shows a minimal recovery UI instead of a white screen. On the sideline\n+ * this matters: an unhandled error mid-game should not wipe the screen\n+ * with no path back.\n+ *\n+ * Errors are forwarded to Sentry (noop when DSN unset). The user gets a\n+ * reload button, which is the cheapest thing that resets state to a known\n+ * good point \u2014 local state is lost but persisted game state rehydrates\n+ * from the server on reconnect.\n+ */\n+export default class ErrorBoundary extends React.Component {\n+  constructor(props) {\n+    super(props);\n+    this.state = { error: null };\n+  }\n+\n+  static getDerivedStateFromError(error) {\n+    return { error };\n+  }\n+\n+  componentDidCatch(error, info) {\n+    captureException(error, { extra: { componentStack: info?.componentStack } });\n+    // Also log to console so the coach can screenshot it during beta.\n+    // eslint-disable-next-line no-console\n+    console.error('ErrorBoundary caught:', error, info);\n+  }\n+\n+  handleReload = () => {",
+      "diff_truncated": true,
+      "secrets_redacted": 0
+    },
+    {
+      "subject": "Merge pull request #2 from jacobdmitch/ai/architecture-v2-foundation",
+      "merged_at": "2026-04-18",
+      "files_changed": 11,
+      "additions": 977,
+      "deletions": 275,
+      "touches_tests": false,
+      "references_issue": true,
+      "files": [
+        "routes/ai-coach.js",
+        "services/agents/lineCoachAgent.js",
+        "services/agents/lineupAgent.js",
+        "services/agents/orchestrator.js",
+        "services/agents/playtimeAgent.js",
+        "services/agents/rosterAgent.js",
+        "services/ai/modelSelector.js",
+        "services/ai/ragContextAssembler.js"
+      ],
+      "sha": "439d549694",
+      "diff_excerpt": "diff --git a/routes/ai-coach.js b/routes/ai-coach.js\n--- a/routes/ai-coach.js\n+++ b/routes/ai-coach.js\n@@ -88,9 +88,13 @@ router.post(\n     });\n \n-    // Call Line Coach AI\n+    // Call Line Coach AI. playtimeTracker is forwarded so the agentic loop\n+    // can execute tools like analyze_playtime against live tracker state.\n+    // coachId enables per-tool audit logging in ai_invocation_log.\n     const recommendation = await getLineCoachRecommendation(gameState, playtimeData, {\n       format: game.format,\n       seasonStats,\n       focusArea,\n+      playtimeTracker,\n+      coachId: req.coachId,\n     });\n \n@@ -100,5 +104,5 @@ router.post(\n     await logAICall({\n       coachId: req.coachId,\n-      model: 'claude-haiku-4-5-20251001',\n+      model: recommendation.model || 'claude-haiku-4-5-20251001',\n       inputTokens: recommendation.usage?.input_tokens || 0,\n       outputTokens: recommendation.usage?.output_tokens || 0,\ndiff --git a/services/agents/lineCoachAgent.js b/services/agents/lineCoachAgent.js\n--- a/services/agents/lineCoachAgent.js\n+++ b/services/agents/lineCoachAgent.js\n@@ -1,182 +1,22 @@\n-import logger from '../logger.js';\n-\n-/**\n- * Line Coach Agent\n- * Processes tool calls from Claude and executes them against game state.\n- * Bridges between Claude's recommendations and actual game state mutations.\n- */\n-\n-/**\n- * Execute a tool call from Claude\n- * @param {string} toolName - Tool name from Claude\n- * @param {Object} toolInput - Tool input from Claude\n- * @param {Object} gameState - Current game state manager\n- * @param {Object} playtimeTracker - Current playtime tracker\n- * @returns {Object} Tool result\n- */\n-export async function executeToolCall(toolName, toolInput, gameState, playtimeTracker) {\n-  logger.debug(`Executing tool: ${toolName}`, { input: toolInput });\n-\n-  try {\n-    switch (toolName) {\n-      case 'suggest_substitution':\n-        return _handleSubstitutionSuggestion(toolInput, gameState, playtimeTracker);\n-\n-      case 'analyze_playtime':\n-        return _handlePlaytimeAnalysis(toolInput, playtimeTracker);\n-\n-      case 'evaluate_lineup':\n-        return _handleLineupEvaluation(toolInput, gameState);\n-\n-      case 'position_recommendation':",
+      "diff_truncated": true,
+      "secrets_redacted": 0
+    }
+  ],
+  "cleanup_flags": {
+    "secret_pattern_hits": {
+      "password_assign": 8
+    },
+    "files_with_pii_keywords": 0,
+    "action": "Remove secrets and any customer PII from the working tree AND git history before sharing."
+  },
+  "deliverable": {
+    "pdf_engine": null,
+    "zip": "CoachIQ-report.zip",
+    "contents": [
+      "report.html",
+      "report.md",
+      "metrics.xlsx",
+      "metrics.csv",
+      "repo_report.json",
+      "chart-activity.svg",
+      "chart-composition.svg",
+      "chart-contributors.svg",
+      "chart-languages.svg",
+      "chart-pr_tiers.svg"
+    ]
+  }
+}
